@@ -1,0 +1,311 @@
+// Google Gemini (chiave personale dell'utente): scelta dei modelli, gara tra modelli, errori.
+// Solo funzioni pure: le richieste di rete sono in services/gemini.ts.
+// Stessa logica dell'app Nutrizione, già provata sul telefono dell'utente.
+
+/** Toglie eventuali ```json … ``` e testo attorno, e restituisce l'oggetto JSON. */
+export function extractJson(text: string): unknown {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/** Per ogni modello, fino a quando non usarlo (millisecondi), dopo un limite raggiunto o se non esiste. */
+export type ModelPauses = Record<string, number>;
+
+// ---------- Modelli nuovi senza aggiornare l'app ----------
+
+/** Un modello dell'elenco di Google (`models.list`). */
+export interface ListedModel {
+  name: string;
+  supportedGenerationMethods?: string[];
+}
+
+/**
+ * Nomi che Google tiene sempre puntati al Flash e al Flash-Lite più recenti: riserva se l'elenco non
+ * arriva o se i modelli scritti nell'app spariscono.
+ */
+export const LATEST_ALIASES = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+
+const FLASH_ID = /^gemini-(\d+(?:\.\d+)?)-flash(-lite)?(-preview)?$/;
+
+/**
+ * I modelli da usare, dal migliore: i due Flash più nuovi e il Flash-Lite più nuovo dell'elenco di Google
+ * (il livello gratuito vale solo per Flash e Flash-Lite). A pari versione prima quello stabile, poi la
+ * "preview". Varianti speciali (immagini, audio, live…) escluse dal nome. Senza elenco valido: `fallback`.
+ */
+export function pickModels(listed: readonly ListedModel[] | null, fallback: readonly string[]): string[] {
+  if (!listed) return [...fallback];
+  const found = listed
+    .filter((m) => (m.supportedGenerationMethods ?? ['generateContent']).includes('generateContent'))
+    .map((m) => {
+      const id = m.name.replace(/^models\//, '');
+      const match = FLASH_ID.exec(id);
+      return match ? { id, version: Number(match[1]), lite: Boolean(match[2]), preview: Boolean(match[3]) } : null;
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null && Number.isFinite(m.version))
+    .sort((a, b) => b.version - a.version || Number(a.preview) - Number(b.preview));
+  // Un solo modello per versione (la "preview" di una versione già stabile è un doppione).
+  const onePerVersion = (list: typeof found) =>
+    list.filter((m, i) => list.findIndex((o) => o.version === m.version) === i);
+  const flash = onePerVersion(found.filter((m) => !m.lite)).slice(0, 2);
+  const lite = onePerVersion(found.filter((m) => m.lite)).slice(0, 1);
+  const out = [...flash, ...lite].map((m) => m.id);
+  return out.length ? out : [...fallback];
+}
+
+/**
+ * Modelli da provare adesso, sempre dal migliore: si saltano quelli in pausa.
+ * Se sono tutti in pausa si provano comunque, nello stesso ordine.
+ */
+export function modelsToTry(models: readonly string[], pauses: ModelPauses, now: number): string[] {
+  const ready = models.filter((m) => !((pauses[m] ?? 0) > now));
+  return ready.length ? ready : [...models];
+}
+
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+
+/** Millisecondi fino alla prossima mezzanotte di Los Angeles (quando Google azzera i limiti giornalieri). */
+export function msToPacificMidnight(now: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(now));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const elapsed = ((get('hour') * 60 + get('minute')) * 60 + get('second')) * 1000;
+  return Math.max(MINUTE, DAY - elapsed + MINUTE);
+}
+
+/**
+ * Fino a quando mettere in pausa un modello dopo una risposta di errore (null = nessuna pausa).
+ * Limite giornaliero: fino alla mezzanotte di Los Angeles. Limite al minuto: il tempo indicato da Google
+ * (almeno 30 secondi). Modello inesistente: una settimana.
+ */
+export function pauseUntil(status: number, json: unknown, now: number): number | null {
+  const problem = geminiProblem(status, json);
+  if (problem === 'model') return now + 7 * DAY;
+  if (problem !== 'quota') return null;
+  const details = (json as { error?: { details?: Record<string, unknown>[] } })?.error?.details ?? [];
+  const text = JSON.stringify(details);
+  if (/PerDay/i.test(text)) return now + msToPacificMidnight(now);
+  const delay = details.map((d) => (typeof d.retryDelay === 'string' ? parseFloat(d.retryDelay) : NaN)).find((n) => Number.isFinite(n));
+  return now + Math.min(10 * MINUTE, Math.max(30_000, (delay ?? 60) * 1000));
+}
+
+/** Com'è andato un tentativo con un modello (per spiegare all'utente cosa non ha funzionato). */
+export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error' | 'timeout' | 'network' | 'slower';
+
+export interface AiAttempt {
+  model: string;
+  outcome: AttemptOutcome;
+  /** Secondi dalla partenza dell'analisi alla risposta (per capire chi è lento). */
+  seconds?: number;
+}
+
+/**
+ * Quanto ragionamento chiedere. Il ragionamento minimo è il più veloce ed è già quello normale del
+ * Flash-Lite; il 3.6 Flash lo accetta, il 3.7 e il 3.8 Flash no (rispondono con un errore): a loro "low".
+ */
+export function thinkingLevelFor(model: string): 'minimal' | 'low' {
+  return /flash-lite|gemini-3\.[56]-flash/.test(model) ? 'minimal' : 'low';
+}
+
+/** "gemini-3.5-flash-lite" → "3.5 Flash-Lite". */
+export function modelLabel(model: string): string {
+  if (model === 'gemini-flash-latest') return 'Flash (il più recente)';
+  if (model === 'gemini-flash-lite-latest') return 'Flash-Lite (il più recente)';
+  return model
+    .replace(/^gemini-/, '')
+    .split('-')
+    .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ')
+    .replace('Flash Lite', 'Flash-Lite');
+}
+
+const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
+  ok: 'ok',
+  empty: 'niente riconosciuto',
+  unreadable: 'risposta non leggibile',
+  quota: 'limite gratuito raggiunto',
+  model: 'non disponibile',
+  error: 'errore',
+  timeout: 'nessuna risposta in tempo',
+  network: 'nessuna connessione',
+  slower: 'più lento di un altro',
+};
+
+// ---------- Più modelli a scaglioni ----------
+//
+// Con una foto i modelli Flash a volte ci mettono più di 45 secondi, il Flash-Lite una decina. Aspettarli
+// uno dopo l'altro voleva dire minuti. Ora si parte dal migliore e, se tarda, si avvia anche il successivo:
+// vince la prima risposta buona, ma un modello migliore ancora in corsa ha qualche secondo di vantaggio.
+
+/**
+ * Dopo quanto, senza risposta, si avvia anche il modello successivo. Il limite gratuito è per modello e
+ * ogni richiesta avviata conta anche se poi non serve: si avvia un modello in più solo quando il migliore
+ * tarda davvero (con le foto il 3.6 Flash risponde di solito in 4–11 s).
+ */
+export const STAGGER_MS = 14_000;
+/** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori (stimano meglio). */
+export const GRACE_MS = 10_000;
+/**
+ * Un modello è "lento con le foto" solo se è rimasto senza rispondere almeno questo tempo. Prima bastava
+ * essere superati da un altro: in pochi giri tutti i modelli diventavano "lenti" e partivano insieme a ogni
+ * foto, consumando il limite gratuito tre volte più in fretta.
+ */
+export const SLOW_AFTER_MS = 20_000;
+
+/** Vero se un modello va segnato lento: non ha risposto (o è andato oltre il tempo) dopo almeno `SLOW_AFTER_MS`. */
+export function wasSlow(outcome: AttemptOutcome | null, waitedMs: number): boolean {
+  if (outcome === 'timeout') return true;
+  return outcome === null && waitedMs >= SLOW_AFTER_MS;
+}
+/** Tempo massimo per tutta l'analisi. */
+export const OVERALL_MS = 75_000;
+/** Se nessuno ha risposto in tempo e restano almeno questi millisecondi, si riprova una volta il più veloce. */
+export const RETRY_MIN_LEFT_MS = 20_000;
+
+/** Come è finita la richiesta a un modello: null = ancora in corso. */
+export type RaceKind = 'ok' | 'empty' | 'fail' | 'stop';
+
+export interface RaceState {
+  /** Un elemento per modello avviato, in ordine dal migliore. */
+  results: readonly (RaceKind | null)[];
+  /** Modelli disponibili in tutto. */
+  total: number;
+  /** Il modello avviato per ultimo è stato lento con le foto di recente: il successivo parte subito. */
+  lastIsSlow: boolean;
+  sinceLastStart: number;
+  /** Da quanto è arrivata la prima risposta buona (null = nessuna). */
+  sinceFirstOk: number | null;
+  elapsed: number;
+  /** Tempo massimo di tutta la richiesta (di solito `OVERALL_MS`; le ricette ne hanno di più). */
+  overallMs?: number;
+  /** Dopo quanto avviare il modello successivo (di solito `STAGGER_MS`; le ricette scrivono di più e aspettano di più). */
+  staggerMs?: number;
+}
+
+export type RaceAction = { type: 'start' } | { type: 'wait' } | { type: 'use'; index: number } | { type: 'stop'; index: number } | { type: 'finish' };
+
+/** Cosa fare adesso nella gara tra i modelli (funzione pura, vedi `analyzeMeal`). */
+export function raceStep(s: RaceState): RaceAction {
+  const overall = s.overallMs ?? OVERALL_MS;
+  const stop = s.results.indexOf('stop');
+  if (stop >= 0) return { type: 'stop', index: stop };
+  const ok = s.results.indexOf('ok');
+  if (ok >= 0) {
+    const betterPending = s.results.slice(0, ok).some((r) => r === null);
+    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= overall) return { type: 'use', index: ok };
+    return { type: 'wait' };
+  }
+  const pending = s.results.filter((r) => r === null).length;
+  const canStart = s.results.length < s.total && s.elapsed < overall;
+  if (canStart && (pending === 0 || s.lastIsSlow || s.sinceLastStart >= (s.staggerMs ?? STAGGER_MS))) return { type: 'start' };
+  if (pending === 0 || s.elapsed >= overall) return { type: 'finish' };
+  return { type: 'wait' };
+}
+
+/** Modelli lenti con le foto: modello → fino a quando (millisecondi). */
+export type SlowModels = Record<string, number>;
+/** Per quanto un modello lento con le foto non ha più il vantaggio di partire da solo. */
+export const SLOW_FOR_MS = 24 * 60 * 60 * 1000;
+
+/** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: niente riconosciuto". */
+export function describeAttempts(attempts: AiAttempt[]): string {
+  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${a.seconds !== undefined ? ` (${a.seconds} s)` : ''}`).join(' · ');
+}
+
+/**
+ * Controllo veloce di una foto rimpicciolita (pixel RGBA): vero se è praticamente tutta nera
+ * o tutta di un colore, cioè se la fotocamera non ha dato un'immagine vera.
+ */
+export function looksBlank(rgba: ArrayLike<number>): boolean {
+  let n = 0;
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i + 2 < rgba.length; i += 4) {
+    const y = 0.299 * rgba[i]! + 0.587 * rgba[i + 1]! + 0.114 * rgba[i + 2]!;
+    sum += y;
+    sumSq += y * y;
+    n++;
+  }
+  if (!n) return true;
+  const mean = sum / n;
+  const sd = Math.sqrt(Math.max(0, sumSq / n - mean * mean));
+  return sd < 2.5 || (mean < 10 && sd < 6);
+}
+
+// ---------- Risposta dell'API di Gemini ----------
+
+/** Testo della risposta (senza le parti di "ragionamento"). */
+export function geminiText(json: unknown): string {
+  const c = (json as { candidates?: { content?: { parts?: { text?: unknown; thought?: unknown }[] } }[] })?.candidates?.[0];
+  const parts = c?.content?.parts ?? [];
+  return parts
+    .filter((p) => typeof p.text === 'string' && p.thought !== true)
+    .map((p) => p.text as string)
+    .join('');
+}
+
+export type GeminiProblem = 'key' | 'quota' | 'model' | 'blocked' | 'region' | 'timeout' | 'network' | 'other';
+
+/**
+ * Vero se la richiesta è caduta perché Gemini non ha risposto in tempo (e non perché manca la rete).
+ * Sul telefono l'errore arriva da Android ("timeout", "Read timed out"), nel browser è un AbortError.
+ */
+export function isTimeoutError(e: unknown): boolean {
+  const err = e as { name?: unknown; message?: unknown } | null;
+  if (err?.name === 'AbortError' || err?.name === 'TimeoutError') return true;
+  const message = typeof err?.message === 'string' ? err.message : typeof e === 'string' ? e : '';
+  return /time[ds]?[ -]?out/i.test(message);
+}
+
+/** Che tipo di errore ha restituito Gemini. */
+export function geminiProblem(status: number, json: unknown): GeminiProblem {
+  const err = (json as { error?: { message?: unknown; status?: unknown; details?: { reason?: unknown }[] } })?.error;
+  const message = typeof err?.message === 'string' ? err.message.toLowerCase() : '';
+  const reasons = (err?.details ?? []).map((d) => String(d?.reason ?? '')).join(' ');
+  if (status === 429) return 'quota';
+  if (/API_KEY_INVALID|API_KEY_EXPIRED/.test(reasons) || message.includes('api key')) return 'key';
+  if (status === 401 || status === 403) return message.includes('location') || message.includes('region') ? 'region' : 'key';
+  if (status === 404) return 'model';
+  if (message.includes('location is not supported') || message.includes('user location')) return 'region';
+  const block = (json as { promptFeedback?: { blockReason?: unknown } })?.promptFeedback?.blockReason;
+  if (block) return 'blocked';
+  return 'other';
+}
+
+export function problemMessage(p: GeminiProblem): string {
+  switch (p) {
+    case 'key':
+      return 'Gemini non accetta la chiave. Ricopiala tutta da aistudio.google.com/apikey e incollala di nuovo nelle Impostazioni.';
+    case 'quota':
+      return 'Hai raggiunto il limite gratuito di Gemini per adesso. Riprova tra qualche minuto o domani.';
+    case 'region':
+      return 'Gemini non è disponibile da dove ti trovi in questo momento.';
+    case 'blocked':
+      return 'Gemini non ha voluto rispondere a questa richiesta. Prova con un’altra foto o cambia le richieste.';
+    case 'model':
+      return 'Il modello di Gemini non è disponibile. Aggiorna l’app o riprova più tardi.';
+    case 'timeout':
+      return 'Gemini non ha risposto in tempo. Riprova tra poco: di solito la seconda volta va.';
+    case 'network':
+      return 'Non riesco a contattare Gemini. Controlla la connessione e riprova.';
+    default:
+      return 'Gemini non ha risposto. Riprova tra poco.';
+  }
+}
+
+/** Le chiavi di Google AI Studio iniziano con "AQ." (nuove, da maggio 2026) o "AIza" (vecchie). */
+export function looksLikeGeminiKey(key: string): boolean {
+  const k = key.trim();
+  return /^AIza[0-9A-Za-z_-]{30,}$/.test(k) || /^AQ\.[0-9A-Za-z_.-]{20,}$/.test(k);
+}

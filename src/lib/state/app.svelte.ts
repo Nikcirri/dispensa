@@ -1,0 +1,182 @@
+// Stato principale dell'app: impostazioni, scheda aperta, dati della dispensa, fogli aperti, azioni comuni.
+import { db } from '../db';
+import { reportError } from '../errors';
+import { todayKey } from '../logic/dates';
+import { applyDraft, itemFromDraft, type ProductDraft } from '../logic/drafts';
+import type { Recipe } from '../logic/recipes';
+import { defaultSettings } from '../logic/settings';
+import { tapFeedback } from '../platform';
+import {
+  addShopping,
+  allItems,
+  allShopping,
+  getAiKey,
+  loadSettings,
+  recentTemplates,
+  removeItem,
+  saveItem,
+  saveSettings,
+  undoRemoval,
+  updateItem,
+} from '../repo';
+import { rescheduleExpiryNotifications } from '../services/notifications';
+import type { Item, Outcome, Settings, ShoppingItem, Template } from '../types';
+import { showToast, showUndoToast } from './ui.svelte';
+
+export type Tab = 'dispensa' | 'aggiungi' | 'ricette';
+
+export const app = $state({
+  ready: false,
+  settings: defaultSettings() as Settings,
+  tab: 'dispensa' as Tab,
+  today: todayKey(),
+  items: [] as Item[],
+  shopping: [] as ShoppingItem[],
+  templates: [] as Template[],
+  aiKey: '',
+});
+
+export interface ProductRequest {
+  /** `new`: prodotto nuovo; `edit`: modifica di uno in dispensa. */
+  mode: 'new' | 'edit';
+  draft: ProductDraft;
+  itemId?: string;
+  /** Frase sopra il modulo (es. cosa non si leggeva nella foto). */
+  hint?: string;
+  /** Dopo il salvataggio si toglie dalla spesa questa riga (prodotto comprato). */
+  shoppingId?: string;
+}
+
+export const sheets = $state({
+  product: null as ProductRequest | null,
+  multi: null as { drafts: ProductDraft[]; note: string; shoppingIds?: string[] } | null,
+  shopping: false,
+  settings: false,
+  stats: false,
+  aiKey: false,
+  recipe: null as Recipe | null,
+  cooked: null as Recipe | null,
+});
+
+/** Chiude tutti i fogli (per esempio quando si apre l'app da una notifica). */
+export function closeAllSheets(): void {
+  sheets.product = null;
+  sheets.multi = null;
+  sheets.shopping = false;
+  sheets.settings = false;
+  sheets.stats = false;
+  sheets.aiKey = false;
+  sheets.recipe = null;
+  sheets.cooked = null;
+}
+
+export function anySheetOpen(): boolean {
+  return !!(sheets.product || sheets.multi || sheets.shopping || sheets.settings || sheets.stats || sheets.aiKey || sheets.recipe || sheets.cooked);
+}
+
+export async function initApp(): Promise<void> {
+  app.settings = await loadSettings(db);
+  app.aiKey = await getAiKey(db);
+  await Promise.all([reloadItems(false), reloadShopping(), reloadTemplates()]);
+  app.ready = true;
+  scheduleNotifications();
+}
+
+export async function updateSettings(change: (s: Settings) => void): Promise<void> {
+  change(app.settings);
+  await saveSettings(db, app.settings);
+}
+
+/** A mezzanotte "oggi" cambia (colori e testi si aggiornano). */
+export function tickToday(): void {
+  const now = todayKey();
+  if (now !== app.today) app.today = now;
+}
+
+// ---------- Avvisi ----------
+
+let notifyTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Rifà gli avvisi delle scadenze poco dopo l'ultima modifica. */
+export function scheduleNotifications(): void {
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => {
+    rescheduleExpiryNotifications($state.snapshot(app.items) as Item[], $state.snapshot(app.settings) as Settings).catch((e: unknown) =>
+      console.warn('Avvisi non programmati', e),
+    );
+  }, 1200);
+}
+
+// ---------- Dati ----------
+
+export async function reloadItems(reschedule = true): Promise<void> {
+  app.items = await allItems(db);
+  if (reschedule) scheduleNotifications();
+}
+
+export async function reloadShopping(): Promise<void> {
+  app.shopping = await allShopping(db);
+}
+
+export async function reloadTemplates(): Promise<void> {
+  app.templates = await recentTemplates(db, 16);
+}
+
+/** Salva i prodotti nuovi confermati. */
+export async function addDrafts(drafts: ProductDraft[]): Promise<Item[]> {
+  const now = new Date().toISOString();
+  const saved: Item[] = [];
+  for (const d of drafts) {
+    const item = itemFromDraft(d, now);
+    await saveItem(db, item, app.today);
+    saved.push(item);
+  }
+  await Promise.all([reloadItems(), reloadTemplates()]);
+  return saved;
+}
+
+/** Salva le modifiche a un prodotto in dispensa. */
+export async function saveEdit(id: string, draft: ProductDraft): Promise<void> {
+  const current = app.items.find((i) => i.id === id);
+  if (!current) return;
+  await saveItem(db, applyDraft($state.snapshot(current) as Item, draft, new Date().toISOString()), app.today);
+  await Promise.all([reloadItems(), reloadTemplates()]);
+}
+
+export async function changeItem(id: string, change: Partial<Item>): Promise<void> {
+  await updateItem(db, id, change);
+  await reloadItems();
+}
+
+const OUTCOME_TEXT: Record<Outcome, string> = { consumato: 'finito', buttato: 'buttato' };
+
+/** Toglie un prodotto (finito o buttato) con "Annulla". */
+export async function finishItem(item: Item, outcome: Outcome): Promise<void> {
+  try {
+    void tapFeedback(outcome === 'consumato' ? 'medium' : 'light');
+    const removal = await removeItem(db, $state.snapshot(item) as Item, outcome, app.today);
+    await reloadItems();
+    showUndoToast(`${item.name}: ${OUTCOME_TEXT[outcome]}`, async () => {
+      await undoRemoval(db, removal);
+      await reloadItems();
+    });
+  } catch (e) {
+    reportError(e);
+  }
+}
+
+/** Mette un prodotto in cima alla spesa. */
+export async function addToShopping(name: string, note = ''): Promise<void> {
+  try {
+    const existed = await addShopping(db, name, note);
+    await reloadShopping();
+    void tapFeedback();
+    showToast(existed ? `${name} è già nella spesa: l’ho messo in cima` : `${name} aggiunto in cima alla spesa`);
+  } catch (e) {
+    reportError(e);
+  }
+}
+
+export function hasAiKey(): boolean {
+  return app.aiKey.trim().length > 0;
+}

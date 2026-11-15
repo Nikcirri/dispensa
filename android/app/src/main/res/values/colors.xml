@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Verde salvia dell'icona -->
+    <color name="ic_launcher_background">#4E8752</color>
+    <!-- Sfondo della schermata di avvio: lo stesso grigio chiarissimo dell'app -->
+    <color name="splash_background">#F8F9FA</color>
+</resources>
