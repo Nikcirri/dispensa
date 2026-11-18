@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
+  import { liveRecipe } from '../../lib/logic/match';
   import { plannedMealOf, whenText } from '../../lib/logic/meals';
   import { recipeShareText, savedCount, useStatuses, type Recipe } from '../../lib/logic/recipes';
   import { recipeWaitingMessage } from '../../lib/logic/recipes';
@@ -24,7 +25,10 @@
   });
   const r = $derived(current);
 
-  const statuses = $derived(useStatuses(r, app.items, app.today));
+  // Collegata alla dispensa di adesso: prodotti finiti e ricomprati, ingredienti "da comprare" comprati.
+  const live = $derived(liveRecipe(r, app.items));
+  const statuses = $derived(useStatuses(live, app.items, app.today));
+  const toBuy = $derived([...live.missing, ...statuses.filter((s) => !s.present).map((s) => ({ name: s.name, amount: s.amount }))]);
   const saved = $derived(savedCount(statuses));
   const liked = $derived(isSaved(r.id));
   let doneSteps = $state<boolean[]>(untrack(() => recipe).steps.map(() => false));
@@ -43,10 +47,11 @@
 
   async function missingToShopping() {
     try {
-      for (const m of [...r.missing].reverse()) await addShopping(db, m.name, m.amount);
+      const list = toBuy;
+      for (const m of [...list].reverse()) await addShopping(db, m.name, m.amount);
       await reloadShopping();
       void tapFeedback();
-      showToast(r.missing.length === 1 ? 'Aggiunto alla spesa' : `${r.missing.length} ingredienti aggiunti alla spesa`);
+      showToast(list.length === 1 ? 'Aggiunto alla spesa' : `${list.length} ingredienti aggiunti alla spesa`);
     } catch (e) {
       reportError(e);
     }
@@ -62,7 +67,7 @@
 
   function cooked() {
     const mealId = sheets.recipeMealId ?? plannedMealOf(r.id, app.meals, app.today)?.id ?? null;
-    sheets.cooked = { recipe: $state.snapshot(r) as Recipe, title: r.title, mealId };
+    sheets.cooked = { recipe: $state.snapshot(live) as Recipe, title: r.title, mealId };
   }
 
   function edit() {
@@ -82,7 +87,10 @@
     </div>
     {#if r.why}<p class="why" class:hot={saved > 0}>♻️ {r.why}</p>{/if}
     {#if fromMeal}
-      <p class="planned"><Icon name="calendar" size={18} /> Nel piano: {whenText(fromMeal.date, fromMeal.slot, app.today)}</p>
+      <p class="planned">
+        <Icon name={fromMeal.done ? 'check' : 'calendar'} size={18} />
+        {fromMeal.done ? 'Cucinata' : 'Nel piano'}: {whenText(fromMeal.date, fromMeal.slot, app.today)}
+      </p>
     {:else}
       <button class="btn btn-soft btn-small planbtn" onclick={() => (sheets.plan = { recipe: $state.snapshot(r) as Recipe })}>
         <Icon name="calendar" size={20} /> Mettila nel piano dei pasti
@@ -106,11 +114,11 @@
     </section>
     {/if}
 
-    {#if r.missing.length}
+    {#if toBuy.length}
       <section>
         <h3 class="section-title">Da comprare</h3>
         <ul class="ing">
-          {#each r.missing as m, i (i)}
+          {#each toBuy as m, i (i)}
             <li>
               <span aria-hidden="true">🛒</span>
               <span class="grow">{m.name}</span>
@@ -165,7 +173,11 @@
   </div>
 
   {#snippet footer()}
-    <button class="btn btn-primary btn-big" onclick={cooked}><Icon name="check" /> L’ho cucinata</button>
+    {#if fromMeal?.done}
+      <button class="btn btn-big" onclick={close}>Chiudi</button>
+    {:else}
+      <button class="btn btn-primary btn-big" onclick={cooked}><Icon name="check" /> L’ho cucinata</button>
+    {/if}
   {/snippet}
 </Sheet>
 

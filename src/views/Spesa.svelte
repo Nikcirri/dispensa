@@ -5,6 +5,9 @@
   import { reportError } from '../lib/errors';
   import { addDays } from '../lib/logic/dates';
   import { draftFromName, draftFromTemplate, templateKey, type ProductDraft } from '../lib/logic/drafts';
+  import { badgeText, daysLeft } from '../lib/logic/expiry';
+  import { formatQuantity } from '../lib/logic/foods';
+  import { findInPantry } from '../lib/logic/match';
   import { shoppingForMeals } from '../lib/logic/meals';
   import { shoppingShareText, sortShopping, splitNames } from '../lib/logic/shopping';
   import { normalize, plural } from '../lib/logic/text';
@@ -28,6 +31,15 @@
     const inList = new Set(app.shopping.map((s) => normalize(s.name)));
     return app.templates.filter((t) => !inPantry.has(normalize(t.name)) && !inList.has(normalize(t.name))).slice(0, 8);
   });
+
+  /** "Ne hai già 1 pz (scade tra 3 giorni)": per non comprare un doppione senza volerlo. */
+  function haveText(name: string): string {
+    const item = findInPantry(name, app.items);
+    if (!item) return '';
+    const d = daysLeft(item, app.today);
+    const when = d === null ? '' : d < 0 ? ', scaduto' : ` (${badgeText(d, item.expiryKind).toLowerCase()})`;
+    return `In dispensa: ${formatQuantity(item.quantity, item.unit)}${when}`;
+  }
 
   // Ingredienti che mancano per i pasti dei prossimi 7 giorni (e non sono già nella lista).
   const nextDays = $derived(Array.from({ length: 7 }, (_, i) => addDays(app.today, i)));
@@ -155,6 +167,7 @@
           <span class="grow">
             <span class="title">{s.name}</span>
             {#if s.note}<span class="sub">{s.note}</span>{/if}
+            {#if haveText(s.name)}<span class="have">🏠 {haveText(s.name)}</span>{/if}
           </span>
           <button class="icon-btn" aria-label="Togli {s.name}" onclick={() => void remove(s)}><Icon name="close" size={20} /></button>
         </li>
@@ -223,6 +236,12 @@
     padding-left: 22px;
     line-height: 1.5;
     overflow-wrap: anywhere;
+  }
+  .have {
+    display: block;
+    font-size: 0.8125rem;
+    color: var(--accent-text);
+    font-weight: 600;
   }
   .for {
     color: var(--text-muted);

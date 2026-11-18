@@ -1,5 +1,13 @@
 # Novità
 
+## [1.2.3] - 2026-11-18
+
+- Un prodotto comprato di nuovo si somma a quello che c'è (es. "Latte 2 pz"): niente più doppioni.
+- Le ricette (anche le salvate) seguono la dispensa: un prodotto ricomprato non risulta più barrato o mancante.
+- "Prodotti salvati" nei Pasti conta anche i piatti già cucinati. In Spesa vedi se un prodotto ce l'hai già.
+- Un prodotto ricomprato prende una scadenza stimata invece di "Senza data".
+- Il nome lungo di un piatto va a capo; una ricetta già cucinata non chiede di nuovo "L'ho cucinata".
+
 ## [1.2.2] - 2026-11-18
 
 - Gli ingredienti comprati e messi in dispensa non risultano più mancanti nei pasti in programma.

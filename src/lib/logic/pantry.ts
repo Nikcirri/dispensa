@@ -2,7 +2,7 @@
 import type { HistoryEntry, Item, Location } from '../types';
 import { formatMonth, monthOf, previousMonth } from './dates';
 import { compareByExpiry, daysLeft, isUrgent, urgencyOf, type Urgency } from './expiry';
-import { matchesQuery } from './text';
+import { matchesQuery, normalize } from './text';
 
 export type LocationFilter = Location | 'tutto';
 export type SortMode = 'scadenza' | 'nome' | 'recenti';
@@ -155,4 +155,51 @@ export function mostWasted(history: readonly HistoryEntry[], max = 3): { name: s
     map.set(key, cur);
   }
   return [...map.values()].filter((x) => x.count >= 2).sort((a, b) => b.count - a.count).slice(0, max);
+}
+
+// ---------- Prodotti già in dispensa ----------
+
+/** Giorni di differenza entro cui due date di scadenza contano come la stessa confezione. */
+const SAME_BATCH_DAYS = 2;
+
+function dayNumber(key: string): number {
+  return Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10))) / 86_400_000;
+}
+
+/**
+ * Il prodotto già in dispensa a cui aggiungere quello nuovo, invece di fare un doppione:
+ * stesso nome (o stesso codice a barre), stesso posto e stessa unità, ancora chiuso.
+ * Restano separate solo due confezioni con date lette davvero (non stimate) lontane più di 2 giorni.
+ */
+export function findMergeTarget(item: Item, items: readonly Item[]): Item | null {
+  const name = normalize(item.name);
+  return (
+    items.find((t) => {
+      if (t.id === item.id || t.location !== item.location || t.unit !== item.unit || t.openedAt) return false;
+      const same = (!!item.barcode && t.barcode === item.barcode) || normalize(t.name) === name;
+      if (!same) return false;
+      if (!t.expiry || !item.expiry) return !t.expiry && !item.expiry;
+      // Una data stimata (≈) non dice niente della confezione vera: si somma, tenendo la data più vicina.
+      if (t.expiryEstimated || item.expiryEstimated) return true;
+      return Math.abs(dayNumber(t.expiry) - dayNumber(item.expiry)) <= SAME_BATCH_DAYS;
+    }) ?? null
+  );
+}
+
+/** Unisce il prodotto nuovo a quello già in dispensa: si sommano le quantità e resta la scadenza più vicina. */
+export function mergeItems(target: Item, incoming: Item, nowIso: string): Item {
+  const earliest = !target.expiry ? incoming : !incoming.expiry ? target : incoming.expiry < target.expiry ? incoming : target;
+  return {
+    ...target,
+    quantity: Math.round((target.quantity + incoming.quantity) * 100) / 100,
+    expiry: earliest.expiry,
+    expiryKind: earliest.expiryKind,
+    expiryEstimated: earliest.expiryEstimated,
+    brand: target.brand || incoming.brand,
+    size: target.size || incoming.size,
+    barcode: target.barcode || incoming.barcode,
+    imageUrl: target.imageUrl || incoming.imageUrl,
+    thumb: target.thumb || incoming.thumb,
+    updatedAt: nowIso,
+  };
 }

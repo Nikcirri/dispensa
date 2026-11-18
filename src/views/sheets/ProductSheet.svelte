@@ -5,7 +5,7 @@
   import { reportError } from '../../lib/errors';
   import { addDays, addMonths, daysBetween, formatLong } from '../../lib/logic/dates';
   import { effectiveExpiry, expiryText, limitedByOpening, pastDateAdvice } from '../../lib/logic/expiry';
-  import { guessFood, isKnownFood, UNITS } from '../../lib/logic/foods';
+  import { formatQuantity, guessFood, isKnownFood, UNITS } from '../../lib/logic/foods';
   import { LOCATIONS } from '../../lib/logic/pantry';
   import type { ProductDraft } from '../../lib/logic/drafts';
   import { capitalize } from '../../lib/logic/text';
@@ -176,13 +176,17 @@
         await saveEdit(itemId, draft);
         showToast('Modifiche salvate');
       } else {
-        await addDrafts([draft]);
+        const res = await addDrafts([draft]);
         if (shoppingId) {
           await deleteShopping(db, [shoppingId]);
           await reloadShopping();
         }
         void tapFeedback('medium');
-        showToast(`${draft.emoji} ${draft.name} in dispensa`);
+        const sum = res.items[0];
+        showToast(
+          res.merged && sum ? `${draft.emoji} ${draft.name}: c’era già, ora ${formatQuantity(sum.quantity, sum.unit)}` : `${draft.emoji} ${draft.name} in dispensa`,
+          { duration: 3500 },
+        );
       }
       close();
     } catch (e) {

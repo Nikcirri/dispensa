@@ -145,6 +145,8 @@ def main():
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(next_scan["payload"]))
 
         page.route("https://generativelanguage.googleapis.com/**", route)
+        # Controllo aggiornamenti: nessuna versione nuova (senza andare davvero su GitHub).
+        page.route("https://api.github.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"tag_name": "v0.0.1", "body": "", "assets": []})))
         page.goto(url)
         page.wait_for_selector("text=Iniziamo")
         page.screenshot(path=f"{SHOTS}/01-onboarding.png")

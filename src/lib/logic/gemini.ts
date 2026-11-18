@@ -484,7 +484,12 @@ export function progressHeadline(p: AiProgress | null): string {
   const failed = attempts.filter((a) => a.status !== 'running' && a.status !== 'ok' && a.status !== 'slower');
   const first = running[0];
   if (ok && first) return `${modelLabel(ok.model)} ha risposto: aspetto qualche secondo ${modelLabel(first.model)}, di solito più preciso`;
-  if (running.length >= 2) return `${modelLabel(running[0]!.model)} ci mette un po’: chiedo anche a ${modelLabel(running[running.length - 1]!.model)}`;
+  if (running.length >= 2) {
+    // Partiti insieme (i modelli lenti di solito si fanno aiutare subito): vince il primo che risponde bene.
+    const together = running[0]!.seconds - running[running.length - 1]!.seconds <= 2;
+    if (together) return `Chiedo a ${running.length} modelli di Gemini insieme, per fare prima`;
+    return `${modelLabel(running[0]!.model)} ci mette un po’: chiedo anche a ${modelLabel(running[running.length - 1]!.model)}`;
+  }
   if (first && failed.length) {
     const f = failed[failed.length - 1]!;
     const again = f.model === first.model ? 'Riprovo' : `Provo con ${modelLabel(first.model)}`;

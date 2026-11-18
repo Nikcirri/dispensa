@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { liveRecipe } from '../lib/logic/match';
   import { savedCount, useStatuses, type Recipe } from '../lib/logic/recipes';
   import { app, openRecipe, sheets } from '../lib/state/app.svelte';
   import { isSaved, toggleSaved } from '../lib/state/recipes.svelte';
@@ -6,7 +7,14 @@
 
   let { recipe }: { recipe: Recipe } = $props();
 
-  const statuses = $derived(useStatuses(recipe, app.items, app.today));
+  // Collegata alla dispensa di adesso (prodotti ricomprati, ingredienti comprati).
+  const live = $derived(liveRecipe(recipe, app.items));
+  const statuses = $derived(useStatuses(live, app.items, app.today));
+  // Da comprare: quelli che non c'erano e quelli finiti nel frattempo.
+  const toBuy = $derived([
+    ...live.missing.map((m) => m.name + (m.amount ? ` (${m.amount})` : '')),
+    ...statuses.filter((s) => !s.present).map((s) => s.name),
+  ]);
   const saved = $derived(savedCount(statuses));
   const present = $derived(statuses.filter((s) => s.present).length);
   const liked = $derived(isSaved(recipe.id));
@@ -45,9 +53,9 @@
       {/each}
     </div>
 
-    {#if recipe.missing.length}
-      <p class="missing"><strong>Ti manca:</strong> {recipe.missing.map((m) => m.name + (m.amount ? ` (${m.amount})` : '')).join(', ')}</p>
-    {:else if recipe.uses.length}
+    {#if toBuy.length}
+      <p class="missing"><strong>Ti manca:</strong> {toBuy.join(', ')}</p>
+    {:else if statuses.length}
       <p class="missing ok">✓ Hai già tutto in casa</p>
     {/if}
     {#if recipe.why}<p class="why">{recipe.why}</p>{/if}

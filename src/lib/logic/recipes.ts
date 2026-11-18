@@ -4,6 +4,7 @@ import { formatShort, formatWeekday } from './dates';
 import { daysLeft, effectiveExpiry, urgencyOf, type Urgency } from './expiry';
 import { formatQuantity } from './foods';
 import { extractJson } from './gemini';
+import { liveRecipe } from './match';
 import { sortItems } from './pantry';
 import { capitalize, newId } from './text';
 
@@ -308,7 +309,7 @@ export function sanitizeRecipe(v: unknown): Recipe | null {
     .map((m) => ({ name: m.name, amount: typeof m.amount === 'string' ? m.amount : '' }));
   return {
     id: o.id,
-    title: o.title,
+    title: fixTitle(o.title) || o.title,
     emoji: typeof o.emoji === 'string' ? o.emoji : '🍽️',
     minutes: typeof o.minutes === 'number' ? o.minutes : 30,
     difficulty: o.difficulty === 'media' || o.difficulty === 'impegnativa' ? o.difficulty : 'facile',
@@ -449,10 +450,13 @@ export interface UseStatus extends RecipeUse {
   expiring: boolean;
 }
 
-/** Stato attuale dei prodotti usati (il prodotto può essere stato consumato nel frattempo). */
+/**
+ * Stato attuale dei prodotti usati. La ricetta si ricollega prima alla dispensa di adesso
+ * (prodotti finiti e ricomprati, ingredienti "da comprare" che ora ci sono): vedi `liveRecipe`.
+ */
 export function useStatuses(recipe: Recipe, items: readonly Item[], today: string): UseStatus[] {
   const byId = new Map(items.map((i) => [i.id, i]));
-  return recipe.uses.map((u) => {
+  return liveRecipe(recipe, items).uses.map((u) => {
     const item = u.itemId ? byId.get(u.itemId) : undefined;
     const d = item ? daysLeft(item, today) : null;
     const expiring = !!item && d !== null && d <= 5 && (d >= 0 || item.expiryKind === 'tmc');

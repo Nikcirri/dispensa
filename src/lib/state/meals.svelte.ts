@@ -3,6 +3,8 @@
 import { db } from '../db';
 import { errorText, reportError } from '../errors';
 import type { AiProgress } from '../logic/gemini';
+import { liveRecipe } from '../logic/match';
+import type { Item } from '../types';
 import { freeSlots, mealFromRecipe, mealFromText, weekStart, type Meal, type MealSlot } from '../logic/meals';
 import { planSlots, type PlanProposal, type PlanSlot } from '../logic/plan';
 import type { Recipe } from '../logic/recipes';
@@ -31,7 +33,8 @@ export async function addMeals(list: Meal[]): Promise<void> {
 }
 
 export async function addRecipeMeal(recipe: Recipe, date: string, slot: MealSlot): Promise<Meal> {
-  const meal = mealFromRecipe(recipe, date, slot, new Date().toISOString());
+  // La ricetta si salva collegata alla dispensa di adesso (prodotti ricomprati, ingredienti già comprati).
+  const meal = mealFromRecipe(liveRecipe(recipe, $state.snapshot(app.items) as Item[]), date, slot, new Date().toISOString());
   await addMeals([meal]);
   return meal;
 }

@@ -507,6 +507,7 @@ select.input {
 }
 .segmented button {
   flex: 1;
+  white-space: nowrap;
   min-height: 44px;
   border: 0;
   border-radius: 999px;

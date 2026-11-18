@@ -45,8 +45,12 @@ export function draftFromName(name: string, today: string, source: ItemSource = 
   };
 }
 
-/** Bozza da un prodotto ricordato: la scadenza si stima con la durata che aveva l'ultima volta. */
+/**
+ * Bozza da un prodotto ricordato: la scadenza si stima con la durata che aveva l'ultima volta
+ * (se non si sa, con la durata tipica di quel cibo: mai "senza data" per un fresco).
+ */
 export function draftFromTemplate(t: Template, today: string): ProductDraft {
+  const shelf = t.shelfDays ?? guessFood(t.name).shelfDays;
   return {
     name: t.name,
     brand: t.brand,
@@ -55,9 +59,9 @@ export function draftFromTemplate(t: Template, today: string): ProductDraft {
     location: t.location,
     quantity: t.quantity > 0 ? t.quantity : 1,
     unit: t.unit,
-    expiry: t.shelfDays ? addDays(today, t.shelfDays) : null,
+    expiry: shelf ? addDays(today, shelf) : null,
     expiryKind: t.expiryKind,
-    expiryEstimated: t.shelfDays !== null,
+    expiryEstimated: shelf !== null,
     openDays: t.openDays,
     barcode: t.barcode,
     imageUrl: t.imageUrl,

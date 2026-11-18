@@ -5,6 +5,7 @@ import { addDays, todayKey } from '../logic/dates';
 import { applyDraft, itemFromDraft, type ProductDraft } from '../logic/drafts';
 import { mealsToRelink, type Meal, type MealSlot } from '../logic/meals';
 import type { Recipe } from '../logic/recipes';
+import { findMergeTarget, mergeItems } from '../logic/pantry';
 import { defaultSettings } from '../logic/settings';
 import { widgetData } from '../logic/widget';
 import { tapFeedback } from '../platform';
@@ -246,16 +247,39 @@ export async function reloadTemplates(): Promise<void> {
 }
 
 /** Salva i prodotti nuovi confermati. */
-export async function addDrafts(drafts: ProductDraft[]): Promise<Item[]> {
+export interface AddResult {
+  /** I prodotti salvati (quelli uniti a uno già in dispensa compaiono una volta, già sommati). */
+  items: Item[];
+  /** Quanti erano già in dispensa e sono stati sommati invece di fare un doppione. */
+  merged: number;
+}
+
+/**
+ * Mette in dispensa i prodotti nuovi. Se lo stesso prodotto c'è già (stesso nome, posto, unità e scadenza)
+ * si somma la quantità invece di fare un doppione (es. latte comprato di nuovo: "Latte 2 pz").
+ */
+export async function addDrafts(drafts: ProductDraft[]): Promise<AddResult> {
   const now = new Date().toISOString();
-  const saved: Item[] = [];
+  const current = $state.snapshot(app.items) as Item[];
+  const saved = new Map<string, Item>();
+  let merged = 0;
   for (const d of drafts) {
     const item = itemFromDraft(d, now);
-    await saveItem(db, item, app.today);
-    saved.push(item);
+    const target = findMergeTarget(item, current);
+    if (target) {
+      const sum = mergeItems(target, item, now);
+      await saveItem(db, sum, app.today);
+      current.splice(current.indexOf(target), 1, sum);
+      saved.set(sum.id, sum);
+      merged++;
+    } else {
+      await saveItem(db, item, app.today);
+      current.push(item);
+      saved.set(item.id, item);
+    }
   }
   await Promise.all([reloadItems(), reloadTemplates()]);
-  return saved;
+  return { items: [...saved.values()], merged };
 }
 
 /** Salva le modifiche a un prodotto in dispensa. */

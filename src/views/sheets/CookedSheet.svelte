@@ -7,6 +7,7 @@
   import { daysLeft } from '../../lib/logic/expiry';
   import { formatQuantity } from '../../lib/logic/foods';
   import { plannedMealOf, whenText } from '../../lib/logic/meals';
+  import { liveRecipe } from '../../lib/logic/match';
   import { leftoverAfter } from '../../lib/logic/recipes';
   import { capitalize, plural } from '../../lib/logic/text';
   import { tapFeedback } from '../../lib/platform';
@@ -45,7 +46,7 @@
 
   let rows = $state<Row[]>(
     untrack(() =>
-      (req.recipe?.uses ?? [])
+      (req.recipe ? liveRecipe(req.recipe, app.items).uses : [])
         .map((u) => {
           const item = u.itemId ? app.items.find((i) => i.id === u.itemId) : undefined;
           return item ? row($state.snapshot(item) as Item, u.amount) : null;
@@ -75,6 +76,12 @@
     if (saving) return;
     saving = true;
     let finished = 0;
+    // Prodotti in scadenza (entro 5 giorni) usati: sono quelli "salvati dallo spreco".
+    const rescued = rows.filter((r) => {
+      if (r.choice === 'no') return false;
+      const d = daysLeft(r.item, app.today);
+      return d !== null && d <= 5;
+    }).length;
     try {
       if (updatePantry) {
         for (const r of rows) {
@@ -88,12 +95,17 @@
         }
         await reloadItems();
       }
-      if (mealId) await changeMeal(mealId, { done: true });
+      if (mealId) await changeMeal(mealId, { done: true, rescued: updatePantry ? rescued : 0 });
       void tapFeedback('medium');
-      showToast(
-        finished ? `Ottimo! ${plural(finished, 'prodotto salvato', 'prodotti salvati')} dallo spreco 🌱` : updatePantry && rows.length ? 'Dispensa aggiornata' : 'Segnato come cucinato ✓',
-        { duration: 3500 },
-      );
+      const message =
+        updatePantry && rescued
+          ? `Ottimo! ${plural(rescued, 'prodotto in scadenza salvato', 'prodotti in scadenza salvati')} dallo spreco 🌱`
+          : updatePantry && finished
+            ? `Dispensa aggiornata: ${plural(finished, 'prodotto finito', 'prodotti finiti')}`
+            : updatePantry && rows.length
+              ? 'Dispensa aggiornata'
+              : 'Segnato come cucinato ✓';
+      showToast(message, { duration: 3500 });
       sheets.cooked = null;
       sheets.recipe = null;
       sheets.recipeMealId = null;

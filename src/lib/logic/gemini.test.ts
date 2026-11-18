@@ -307,6 +307,16 @@ describe('Gemini: avanzamento da mostrare', () => {
     ).toBe('3.8 Flash ci mette un po’: chiedo anche a 3.6 Flash');
     expect(
       progressHeadline({
+        seconds: 1,
+        attempts: [
+          { model: 'gemini-3.8-flash', status: 'running', seconds: 1 },
+          { model: 'gemini-3.6-flash', status: 'running', seconds: 1 },
+          { model: 'gemini-3.5-flash-lite', status: 'running', seconds: 1 },
+        ],
+      }),
+    ).toBe('Chiedo a 3 modelli di Gemini insieme, per fare prima');
+    expect(
+      progressHeadline({
         seconds: 2,
         attempts: [
           { model: 'gemini-3.8-flash', status: 'quota', seconds: 1 },

@@ -3,6 +3,7 @@
 import type { Item, ShoppingItem } from '../types';
 import { addDays, daysBetween, formatShort, formatWeekday, isDateKey, weekdayIndex, weekdayName } from './dates';
 import { daysLeft, effectiveExpiry, isUrgent } from './expiry';
+import { relinkRecipe } from './match';
 import { sanitizeRecipe, type Recipe } from './recipes';
 import { capitalize, newId, normalize } from './text';
 
@@ -20,6 +21,8 @@ export interface Meal {
   note: string;
   /** Già cucinato. */
   done: boolean;
+  /** Prodotti in scadenza usati quando è stato cucinato ("salvati dallo spreco"). */
+  rescued?: number;
   createdAt: string;
 }
 
@@ -280,88 +283,6 @@ export function urgentNotPlanned(items: readonly Item[], meals: readonly Meal[],
     .slice(0, max);
 }
 
-// ---------- Ingredienti comprati dopo ----------
-
-const STOP_WORDS = new Set(['del', 'dei', 'della', 'delle', 'dello', 'degli', 'alla', 'alle', 'allo', 'con', 'per', 'gli', 'una', 'uno', 'senza']);
-/** Parole che fanno un prodotto diverso: "Pomodori" non sono "Pomodori pelati". */
-const OTHER_PRODUCT = ['pelat', 'passat', 'concentrat', 'polver', 'condensat', 'sciroppat', 'scatol', 'sottolio', 'sottacet'];
-
-/** "Pomodori pelati" → ["pomodor", "pelat"]: parole senza la vocale finale (pomodoro/pomodori, carota/carote). */
-export function nameStems(name: string): string[] {
-  return normalize(name)
-    .split(' ')
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-    .map((w) => (w.length > 3 ? w.replace(/[aeiou]+$/, '') : w));
-}
-
-/**
- * Il prodotto della dispensa che corrisponde a un ingrediente scritto ("Pomodori pelati", "Uova"):
- * stesso nome, oppure stesse parole al singolare/plurale, oppure un prodotto con qualche parola in più
- * ("Latte" → "Latte parzialmente scremato") ma non un prodotto diverso ("Pomodori" ≠ "Pomodori pelati").
- */
-export function findInPantry(name: string, items: readonly Item[], exclude: ReadonlySet<string> = new Set()): Item | null {
-  const target = nameStems(name);
-  if (!target.length) return null;
-  const candidates = items.filter((i) => !exclude.has(i.id));
-  const n = normalize(name);
-  const exact = candidates.find((i) => normalize(i.name) === n);
-  if (exact) return exact;
-  const key = target.join(' ');
-  const same = candidates.find((i) => nameStems(i.name).join(' ') === key);
-  if (same) return same;
-  const containing = candidates
-    .filter((i) => {
-      const words = nameStems(i.name);
-      if (!target.every((t) => words.includes(t))) return false;
-      const extra = words.filter((w) => !target.includes(w));
-      return !extra.some((w) => OTHER_PRODUCT.some((o) => w.startsWith(o)));
-    })
-    .sort((a, b) => a.name.length - b.name.length);
-  return containing[0] ?? null;
-}
-
-/**
- * Collega la ricetta alla dispensa di adesso:
- * - gli ingredienti "da comprare" che ora ci sono (comprati, o aggiunti dopo) diventano prodotti usati:
- *   non risultano più mancanti e in Dispensa sono "In programma";
- * - un prodotto usato che non c'è più (finito) si ricollega a uno uguale comprato di nuovo.
- * Restituisce null se non cambia niente.
- */
-export function relinkRecipe(recipe: Recipe, items: readonly Item[]): Recipe | null {
-  const present = new Set(items.map((i) => i.id));
-  const taken = new Set(recipe.uses.map((u) => u.itemId).filter((id): id is string => !!id && present.has(id)));
-  let changed = false;
-  const uses = recipe.uses.map((u) => {
-    if (u.itemId && present.has(u.itemId)) return u;
-    const item = findInPantry(u.name, items, taken);
-    if (!item) return u;
-    taken.add(item.id);
-    changed = true;
-    return { ...u, itemId: item.id, name: item.name, emoji: item.emoji || u.emoji };
-  });
-  const found = new Map<number, Item>();
-  // Prima i nomi uguali, poi le corrispondenze più larghe: "Pomodori pelati" non si prende i "Pomodori".
-  for (const strict of [true, false]) {
-    recipe.missing.forEach((m, i) => {
-      if (found.has(i)) return;
-      const item = findInPantry(m.name, items, taken);
-      if (!item) return;
-      const isStrict = normalize(item.name) === normalize(m.name) || nameStems(item.name).join(' ') === nameStems(m.name).join(' ');
-      if (strict && !isStrict) return;
-      found.set(i, item);
-      taken.add(item.id);
-    });
-  }
-  if (!found.size && !changed) return null;
-  const missing: Recipe['missing'] = [];
-  recipe.missing.forEach((m, i) => {
-    const item = found.get(i);
-    if (item) uses.push({ itemId: item.id, name: item.name, emoji: item.emoji || '🛒', amount: m.amount });
-    else missing.push(m);
-  });
-  return { ...recipe, uses, missing };
-}
-
 /** I pasti ancora da fare da ricollegare alla dispensa (ingredienti comprati o ricomprati), già aggiornati. */
 export function mealsToRelink(meals: readonly Meal[], items: readonly Item[], today: string): Meal[] {
   const out: Meal[] = [];
@@ -406,7 +327,7 @@ export interface WeekStats {
   planned: number;
   /** Pranzi e cene della settimana: 14. */
   total: number;
-  /** Prodotti in scadenza (entro 5 giorni) usati dai pasti da fare. */
+  /** Prodotti in scadenza (entro 5 giorni) usati dai pasti da fare e da quelli già cucinati. */
   rescued: number;
 }
 
@@ -415,7 +336,9 @@ export function weekStats(meals: readonly Meal[], days: readonly string[], items
   let planned = 0;
   for (const d of byDay.values()) planned += (d.pranzo.length ? 1 : 0) + (d.cena.length ? 1 : 0);
   const rescued = new Set<string>();
+  let cooked = 0;
   for (const m of meals) {
+    if (m.done && days.includes(m.date)) cooked += m.rescued ?? 0;
     if (m.done || !m.recipe || m.date < today || !days.includes(m.date)) continue;
     for (const u of m.recipe.uses) {
       const item = items.find((i) => i.id === u.itemId);
@@ -423,7 +346,7 @@ export function weekStats(meals: readonly Meal[], days: readonly string[], items
       if (item && d !== null && d <= 5) rescued.add(item.id);
     }
   }
-  return { planned, total: days.length * 2, rescued: rescued.size };
+  return { planned, total: days.length * 2, rescued: rescued.size + cooked };
 }
 
 /** Testo da mandare in famiglia (WhatsApp…): i pasti della settimana giorno per giorno. */
@@ -470,6 +393,7 @@ export function sanitizeMeal(v: unknown): Meal | null {
     recipe: o.recipe ? sanitizeRecipe(o.recipe) : null,
     note: typeof o.note === 'string' ? o.note.slice(0, 300) : '',
     done: o.done === true,
+    ...(typeof o.rescued === 'number' && o.rescued > 0 ? { rescued: Math.round(o.rescued) } : {}),
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
   };
 }

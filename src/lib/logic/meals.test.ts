@@ -3,9 +3,7 @@ import type { Item } from '../types';
 import {
   dayTitle,
   dishEmoji,
-  findInPantry,
   mealsToRelink,
-  relinkRecipe,
   firstFreeSlot,
   freeSlots,
   mealFromRecipe,
@@ -28,6 +26,7 @@ import {
   whenText,
   widgetMeals,
 } from './meals';
+import { findInPantry, liveRecipe, relinkRecipe } from './match';
 import { buildPlanPrompt, parsePlan, planSlots, PLAN_SCHEMA, slotCode } from './plan';
 import type { Recipe } from './recipes';
 import { widgetData } from './widget';
@@ -159,6 +158,8 @@ describe('piano dei pasti: dispensa e spesa', () => {
     const days = weekDays('2026-11-16');
     const pasta = mealFromText('pasta al pesto', TODAY, 'pranzo', 'x');
     expect(weekStats([friday, pasta], days, items, TODAY)).toEqual({ planned: 2, total: 14, rescued: 2 });
+    // Già cucinato: contano i prodotti in scadenza salvati quel giorno.
+    expect(weekStats([{ ...friday, done: true, rescued: 3 }], days, items, TODAY).rescued).toBe(3);
     const text = weekShareText([friday, pasta], days);
     expect(text).toContain('📅 Mercoledì 18 novembre');
     expect(text).toContain('☀️ Pranzo: 🍝 Pasta al pesto');
@@ -246,6 +247,32 @@ describe('ingredienti comprati dopo', () => {
     // Solo pelati in casa: i pomodori freschi mancano ancora.
     expect(findInPantry('Pomodori', [pelati])).toBeNull();
     expect(findInPantry('Basilico', [pomodori, latte])).toBeNull();
+    // Prodotti diversi con la stessa parola: no.
+    expect(findInPantry('Pane', [item({ id: 'pg', name: 'Pane grattugiato' })])).toBeNull();
+    expect(findInPantry('Riso', [item({ id: 'lr', name: 'Latte di riso' })])).toBeNull();
+    expect(findInPantry('Latte', [item({ id: 'ls', name: 'Latte di soia' })])).toBeNull();
+    expect(findInPantry('Parmigiano', [item({ id: 'pr', name: 'Parmigiano Reggiano' })])?.id).toBe('pr');
+  });
+
+  it('ricetta salvata: prodotti finiti e ricomprati (nuovo id) tornano presenti, i mancanti comprati non mancano più', () => {
+    const carbonara = recipe({
+      title: 'Carbonara',
+      uses: [
+        { itemId: 'vecchio-guanciale', name: 'Guanciale', emoji: '🥓', amount: '150 g' },
+        { itemId: 'vecchie-uova', name: 'Uova', emoji: '🥚', amount: '4' },
+      ],
+      missing: [{ name: 'Tonno', amount: '' }],
+    });
+    const guanciale = item({ id: 'g2', name: 'Guanciale' });
+    const tonno = item({ id: 't2', name: 'Tonno', location: 'dispensa' });
+    const live = liveRecipe(carbonara, [guanciale, tonno]);
+    expect(live.uses.map((u) => [u.name, u.itemId])).toEqual([
+      ['Guanciale', 'g2'],
+      ['Uova', 'vecchie-uova'],
+      ['Tonno', 't2'],
+    ]);
+    expect(live.missing).toEqual([]);
+    expect(liveRecipe(carbonara, [])).toBe(carbonara);
   });
 
   it('gli ingredienti comprati non mancano più e diventano "in programma"', () => {

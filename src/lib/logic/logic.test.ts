@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { HistoryEntry, Item } from '../types';
 import { BackupError, makeBackup, parseBackup } from './backup';
 import { addDays, addMonths, daysBetween, formatShort, greeting, isDateKey, lastDayOfMonth } from './dates';
-import { draftFromName, itemFromDraft, templateFromItem, templateKey } from './drafts';
+import { draftFromName, draftFromTemplate, itemFromDraft, templateFromItem, templateKey } from './drafts';
 import { badgeText, compareByExpiry, daysLeft, effectiveExpiry, expiryText, limitedByOpening, urgencyOf } from './expiry';
 import { formatQuantity, guessFood, quantityStep } from './foods';
 import { planExpiryNotifications } from './notify';
 import { parseProductResponse } from './off';
-import { filterItems, groupByUrgency, itemsToUseFirst, mostWasted, monthStats, sortItems, summarize } from './pantry';
+import { filterItems, findMergeTarget, groupByUrgency, itemsToUseFirst, mergeItems, mostWasted, monthStats, sortItems, summarize } from './pantry';
 import { defaultSettings, sanitizeSettings } from './settings';
 import { addToList, shoppingShareText, sortShopping, splitNames } from './shopping';
 import { joinNames, matchesQuery, normalize } from './text';
@@ -252,5 +252,62 @@ describe('impostazioni e backup', () => {
     expect(back.settings.onboarded).toBe(true);
     expect(() => parseBackup('{"app":"nutrizione","data":{}}')).toThrow(BackupError);
     expect(() => parseBackup('ciao')).toThrow(BackupError);
+  });
+});
+
+describe('prodotti già in dispensa: niente doppioni', () => {
+  const base = (over: Partial<Item>): Item => ({
+    id: 'a',
+    name: 'Latte',
+    emoji: '🥛',
+    location: 'frigo',
+    quantity: 1,
+    unit: 'pz',
+    expiry: '2026-11-24',
+    expiryKind: 'scadenza',
+    expiryEstimated: true,
+    openedAt: null,
+    openDays: null,
+    source: 'mano',
+    addedAt: '',
+    updatedAt: '',
+    ...over,
+  });
+
+  it('stesso prodotto, posto, unità e scadenza vicina: si somma', () => {
+    const have = base({});
+    const again = base({ id: 'b', name: 'latte' });
+    expect(findMergeTarget(again, [have])?.id).toBe('a');
+    const sum = mergeItems(have, again, 'now');
+    expect(sum).toMatchObject({ id: 'a', quantity: 2, expiry: '2026-11-24', updatedAt: 'now' });
+    // Scadenze lette diverse di 1 giorno: stessa confezione; la data che resta è la più vicina.
+    const read = base({ id: 'c', expiry: '2026-11-23', expiryEstimated: false });
+    expect(mergeItems(base({ expiryEstimated: false }), read, 'now').expiry).toBe('2026-11-23');
+    expect(findMergeTarget(read, [base({ expiryEstimated: false })])?.id).toBe('a');
+    // Comprato di nuovo con la data stimata: si somma a quello che c'è, anche se la data vera era un'altra.
+    const bought = base({ id: 'd', expiry: '2026-12-10', expiryEstimated: true });
+    const read2 = base({ expiry: '2026-11-25', expiryEstimated: false });
+    expect(findMergeTarget(bought, [read2])?.id).toBe('a');
+    expect(mergeItems(read2, bought, 'now')).toMatchObject({ quantity: 2, expiry: '2026-11-25', expiryEstimated: false });
+  });
+
+  it('confezioni diverse restano separate', () => {
+    const have = base({ expiryEstimated: false });
+    expect(findMergeTarget(base({ id: 'b', expiry: '2026-12-10', expiryEstimated: false }), [have])).toBeNull();
+    expect(findMergeTarget(base({ id: 'b', location: 'freezer' }), [have])).toBeNull();
+    expect(findMergeTarget(base({ id: 'b', unit: 'l' }), [have])).toBeNull();
+    expect(findMergeTarget(base({ id: 'b' }), [base({ openedAt: '2026-11-17' })])).toBeNull();
+    expect(findMergeTarget(base({ id: 'b', name: 'Latte di soia' }), [have])).toBeNull();
+    // Stesso codice a barre anche con un nome scritto diverso.
+    expect(findMergeTarget(base({ id: 'b', name: 'Latte PS', barcode: '800' }), [base({ barcode: '800' })])?.id).toBe('a');
+  });
+});
+
+describe('prodotto ricordato senza durata', () => {
+  it('ricomprato: la scadenza si stima dal tipo di cibo, non resta senza data', () => {
+    const t = { key: 'n:mozzarella', name: 'Mozzarella fior di latte', emoji: '🧀', location: 'frigo' as const, quantity: 1, unit: 'pz' as const, expiryKind: 'scadenza' as const, shelfDays: null, openDays: 2, uses: 1, lastUsed: '' };
+    const d = draftFromTemplate(t, '2026-11-18');
+    expect(d.expiry).not.toBeNull();
+    expect(d.expiryEstimated).toBe(true);
   });
 });

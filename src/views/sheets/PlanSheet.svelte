@@ -5,6 +5,7 @@
   import { addDays } from '../../lib/logic/dates';
   import { dayTitle, daySubtitle, firstFreeSlot, isPastSlot, mealsByDay, SLOTS, whenText, type MealSlot } from '../../lib/logic/meals';
   import { effectiveExpiry } from '../../lib/logic/expiry';
+  import { liveRecipe } from '../../lib/logic/match';
   import type { Recipe } from '../../lib/logic/recipes';
   import { app, sheets, type PlanRequest } from '../../lib/state/app.svelte';
   import { addRecipeMeal, changeMeal } from '../../lib/state/meals.svelte';
@@ -25,7 +26,7 @@
   // Il giorno in cui scade il primo ingrediente della ricetta: meglio cucinarla entro quel giorno.
   const deadline = $derived.by(() => {
     if (!recipe) return null;
-    const dates = recipe.uses
+    const dates = liveRecipe(recipe, app.items).uses
       .map((u) => app.items.find((i) => i.id === u.itemId))
       .filter((i): i is Item => !!i && i.expiryKind === 'scadenza')
       .map((i) => effectiveExpiry(i))

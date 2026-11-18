@@ -25,6 +25,13 @@
 
   // Ricalcolati quando cambiano le scelte o il piano.
   const targets = $derived(planTargets());
+  const targetsText = $derived.by(() => {
+    const first = targets[0];
+    const last = targets[targets.length - 1];
+    if (!first || !last) return '';
+    const a = whenText(first.date, first.slot, app.today);
+    return targets.length > 1 ? `da ${a} a ${whenText(last.date, last.slot, app.today)}` : a;
+  });
   const chosen = $derived(planAi.proposals.filter((p) => p.keep).length);
 
   // Persone, vegetariano e senza lattosio come nelle Ricette (anche se la scheda Ricette non è ancora stata aperta).
@@ -101,8 +108,7 @@
 
       <p class="targets">
         {#if targets.length}
-          Riempio <strong>{plural(targets.length, 'pasto libero', 'pasti liberi')}</strong>: da {whenText(targets[0]!.date, targets[0]!.slot, app.today)}
-          {#if targets.length > 1}a {whenText(targets[targets.length - 1]!.date, targets[targets.length - 1]!.slot, app.today)}{/if}.
+          Riempio <strong>{plural(targets.length, 'pasto libero', 'pasti liberi')}</strong>: {targetsText}.
         {:else}
           Questi pasti sono già tutti in programma: scegli più giorni o anche gli altri pasti.
         {/if}
@@ -302,6 +308,7 @@
     color: var(--text-muted);
   }
   .foot {
+    width: 100%;
     display: flex;
     gap: 8px;
   }

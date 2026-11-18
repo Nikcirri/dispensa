@@ -23,6 +23,20 @@
   let text = $state('');
   let title = $state(untrack(() => meal?.title ?? ''));
   let input = $state<HTMLInputElement | null>(null);
+  let titleEl = $state<HTMLTextAreaElement | null>(null);
+
+  /** Il nome del piatto va a capo: il campo cresce con il testo (anche i nomi lunghi dell'IA si leggono tutti). */
+  function fitTitle() {
+    const el = titleEl;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }
+
+  $effect(() => {
+    void title;
+    fitTitle();
+  });
 
   const warns = $derived(meal ? mealWarnings(meal, app.items, app.today) : []);
   const ideas = $derived(dedupe([...recipes.list, ...recipes.saved]));
@@ -129,7 +143,22 @@
     {:else if meal}
       <div class="head">
         <span class="big-emoji" aria-hidden="true">{meal.emoji}</span>
-        <input class="input title-in" bind:value={title} maxlength="80" aria-label="Nome del piatto" onblur={() => void saveTitle()} onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()} />
+        <textarea
+          class="input title-in"
+          rows="1"
+          bind:this={titleEl}
+          bind:value={title}
+          maxlength="80"
+          aria-label="Nome del piatto"
+          oninput={fitTitle}
+          onblur={() => void saveTitle()}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.currentTarget as HTMLTextAreaElement).blur();
+            }
+          }}
+        ></textarea>
       </div>
 
       {#if warns.length}
@@ -287,6 +316,11 @@
     flex: 1;
     min-width: 0;
     font-weight: 600;
+    line-height: 1.35;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-radius: 20px;
+    overflow: hidden;
   }
   .warn p {
     margin: 0;

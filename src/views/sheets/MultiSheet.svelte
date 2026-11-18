@@ -44,13 +44,17 @@
     saving = true;
     try {
       const drafts = chosen.map((r) => ({ ...(JSON.parse(JSON.stringify(r.d)) as ProductDraft), name: r.d.name.trim() }));
-      await addDrafts(drafts);
+      const res = await addDrafts(drafts);
       if (shoppingIds.length) {
         await deleteShopping(db, shoppingIds);
         await reloadShopping();
       }
       void tapFeedback('medium');
-      showToast(`${plural(drafts.length, 'prodotto aggiunto', 'prodotti aggiunti')} in dispensa`);
+      showToast(
+        `${plural(drafts.length, 'prodotto aggiunto', 'prodotti aggiunti')} in dispensa` +
+          (res.merged ? ` (${res.merged === 1 ? '1 c’era già: sommato' : `${res.merged} c’erano già: sommati`})` : ''),
+        { duration: 3500 },
+      );
       close();
     } catch (e) {
       saving = false;
