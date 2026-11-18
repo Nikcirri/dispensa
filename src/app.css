@@ -119,6 +119,15 @@ select:focus:not(:focus-visible),
 a:focus:not(:focus-visible) {
   outline: none;
 }
+/* Su Android il menu a tendina resta "a fuoco" dopo la scelta e mostrava un riquadro: il fuoco dei menu
+   si vede già dal bordo del campo. */
+select:focus,
+select:focus-visible {
+  outline: none;
+}
+textarea {
+  resize: none;
+}
 
 input,
 select,

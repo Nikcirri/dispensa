@@ -393,3 +393,52 @@ export function looksLikeGeminiKey(key: string): boolean {
   const k = key.trim();
   return /^AIza[0-9A-Za-z_-]{30,}$/.test(k) || /^AQ\.[0-9A-Za-z_.-]{20,}$/.test(k);
 }
+
+// ---------- Avanzamento in tempo reale (da mostrare mentre l'IA lavora) ----------
+
+/** Stato di un modello mentre la richiesta è in corso. */
+export type LiveStatus = 'running' | AttemptOutcome;
+
+export interface LiveAttempt {
+  model: string;
+  status: LiveStatus;
+  /** Secondi da quando è partito questo modello. */
+  seconds: number;
+  note?: string;
+}
+
+export interface AiProgress {
+  attempts: LiveAttempt[];
+  /** Secondi dall'inizio della richiesta. */
+  seconds: number;
+}
+
+/** "al lavoro…", "ha risposto ✓", "limite gratuito raggiunto"… */
+export function liveStatusText(s: LiveStatus): string {
+  if (s === 'running') return 'al lavoro…';
+  if (s === 'ok') return 'ha risposto ✓';
+  return OUTCOME_TEXT[s];
+}
+
+/** Una frase su cosa sta succedendo adesso (quale modello lavora e perché ne parte un altro). */
+export function progressHeadline(p: AiProgress | null): string {
+  const attempts = p?.attempts ?? [];
+  if (!attempts.length) return 'Scelgo il modello di Gemini…';
+  const running = attempts.filter((a) => a.status === 'running');
+  const ok = attempts.find((a) => a.status === 'ok');
+  const failed = attempts.filter((a) => a.status !== 'running' && a.status !== 'ok' && a.status !== 'slower');
+  const first = running[0];
+  if (ok && first) return `${modelLabel(ok.model)} ha risposto: aspetto qualche secondo ${modelLabel(first.model)}, di solito più preciso`;
+  if (running.length >= 2) return `${modelLabel(running[0]!.model)} ci mette un po’: chiedo anche a ${modelLabel(running[running.length - 1]!.model)}`;
+  if (first && failed.length) {
+    const f = failed[failed.length - 1]!;
+    return `${modelLabel(f.model)}: ${OUTCOME_TEXT[f.status as AttemptOutcome]}. Provo con ${modelLabel(first.model)}`;
+  }
+  if (first) return `Gemini ${modelLabel(first.model)} sta lavorando`;
+  return 'Quasi fatto…';
+}
+
+/** "Fatto da Gemini 3.8 Flash in 9 s". */
+export function usedModelText(model: string, seconds: number): string {
+  return `Fatto da Gemini ${modelLabel(model)} in ${seconds < 1 ? 'meno di un secondo' : `${seconds} s`}`;
+}

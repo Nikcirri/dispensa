@@ -45,11 +45,13 @@ export interface ProductRequest {
   hint?: string;
   /** Dopo il salvataggio si toglie dalla spesa questa riga (prodotto comprato). */
   shoppingId?: string;
+  /** Chi ha letto la foto (modello di Gemini e secondi). */
+  aiInfo?: string;
 }
 
 export const sheets = $state({
   product: null as ProductRequest | null,
-  multi: null as { drafts: ProductDraft[]; note: string; shoppingIds?: string[] } | null,
+  multi: null as { drafts: ProductDraft[]; note: string; shoppingIds?: string[]; aiInfo?: string } | null,
   shopping: false,
   settings: false,
   stats: false,

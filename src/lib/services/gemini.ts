@@ -26,6 +26,7 @@ import {
   thinkingLevelFor,
   wasSlow,
   type AiAttempt,
+  type AiProgress,
   type AttemptOutcome,
   type GeminiProblem,
   type ListedModel,
@@ -333,6 +334,8 @@ export interface GeminiTask<T> {
   staggerMs?: number;
   /** Oltre quando non si aspetta più un modello migliore se uno più leggero ha già risposto. */
   graceEndMs?: number;
+  /** Chiamata più volte al secondo con lo stato dei modelli (per mostrare cosa sta facendo l'IA). */
+  onProgress?: (p: AiProgress) => void;
 }
 
 export interface GeminiResult<T> {
@@ -340,6 +343,8 @@ export interface GeminiResult<T> {
   model: string;
   /** Riga tecnica sui tentativi (vuota se il primo modello ha risposto subito). */
   detail: string;
+  /** Secondi dall'inizio della richiesta. */
+  seconds: number;
 }
 
 type ModelResult<T> = (
@@ -442,8 +447,24 @@ export async function runGemini<T>(key: string, task: GeminiTask<T>): Promise<Ge
       });
   };
 
+  const emit = () => {
+    if (!task.onProgress) return;
+    const now = Date.now();
+    task.onProgress({
+      attempts: runs.map((r) => ({
+        model: r.model,
+        status: r.result ? r.result.outcome : 'running',
+        seconds: Math.round(((r.result ? r.doneAt : now) - r.startedAt) / 1000),
+        ...(r.result?.note ? { note: r.result.note } : {}),
+      })),
+      seconds: Math.round((now - t0) / 1000),
+    });
+  };
+  emit();
+
   let outcome: { type: 'use' | 'stop'; index: number } | { type: 'finish' };
   for (;;) {
+    emit();
     const now = Date.now();
     const last = runs[runs.length - 1];
     const step = raceStep({
@@ -506,16 +527,17 @@ export async function runGemini<T>(key: string, task: GeminiTask<T>): Promise<Ge
     ...(r.result?.note ? { note: r.result.note } : {}),
   }));
   const detail = describeAttempts(attempts);
+  const seconds = Math.round((stoppedAt - t0) / 1000);
   if (outcome.type === 'use') {
     const r = runs[outcome.index]!.result as { value: T };
-    return { value: r.value, model: runs[outcome.index]!.model, detail: attempts.length > 1 ? detail : '' };
+    return { value: r.value, model: runs[outcome.index]!.model, detail: attempts.length > 1 ? detail : '', seconds };
   }
   if (outcome.type === 'stop') {
     const r = runs[outcome.index]!.result as { problem: GeminiProblem };
     throw new AiError(problemMessage(r.problem), detail);
   }
   const empty = runs.find((r) => r.result?.kind === 'empty');
-  if (empty?.result && 'value' in empty.result) return { value: empty.result.value, model: empty.model, detail };
+  if (empty?.result && 'value' in empty.result) return { value: empty.result.value, model: empty.model, detail, seconds };
   const results = runs.map((r) => r.result);
   if (results.some((r) => r && 'unreadable' in r && r.unreadable)) {
     throw new AiError('Gemini ha risposto in modo incompleto. Riprova: di solito la seconda volta va.', detail);

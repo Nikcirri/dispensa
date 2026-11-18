@@ -101,6 +101,8 @@ def main():
     errors = []
     next_scan = {"payload": SCAN}
     recipe_requests = []
+    # La prima richiesta di ricette resta in attesa: serve a fotografare "cosa sta facendo l'IA".
+    held = {"hold": False, "routes": []}
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
         ctx = browser.new_context(viewport={"width": WIDTH, "height": 800}, device_scale_factor=2, permissions=["camera"], locale="it-IT")
@@ -118,7 +120,10 @@ def main():
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}))
             elif '"recipes"' in body:
                 recipe_requests.append(body)
-                r.fulfill(status=200, content_type="application/json", body=gemini_reply(RECIPES))
+                if held["hold"]:
+                    held["routes"].append(r)
+                else:
+                    r.fulfill(status=200, content_type="application/json", body=gemini_reply(RECIPES))
             else:
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(next_scan["payload"]))
 
@@ -213,11 +218,29 @@ def main():
         page.click("nav button:has-text('Ricette')")
         page.wait_for_timeout(500)
         page.screenshot(path=f"{SHOTS}/14-ricette.png")
+        # Il campo "Altro?" va a capo e si allarga: la frase lunga si vede tutta.
+        long_text = "solo prodotti in scadenza, senza pecorino e senza forno perché stasera fa caldo"
+        page.fill("textarea.extra", long_text)
+        page.wait_for_timeout(200)
+        h = page.eval_on_selector("textarea.extra", "el => el.clientHeight")
+        assert h > 60, f"il campo Altro deve crescere con il testo (alto {h}px)"
+        page.screenshot(path=f"{SHOTS}/14b-altro-lungo.png")
         # Invio sulla tastiera nel campo "Altro?" genera le ricette (come il pulsante).
-        page.fill("input.extra", "senza pecorino")
-        page.press("input.extra", "Enter")
+        held["hold"] = True
+        page.press("textarea.extra", "Enter")
+        page.wait_for_selector("text=Gemini 3.8 Flash", timeout=10000)
+        page.wait_for_timeout(1300)
+        page.screenshot(path=f"{SHOTS}/14c-ia-al-lavoro.png")
+        held["hold"] = False
+        for r in held["routes"]:
+            r.fulfill(status=200, content_type="application/json", body=gemini_reply(RECIPES))
+        held["routes"].clear()
         page.wait_for_selector("text=Frittata di zucchine", timeout=20000)
         assert recipe_requests and "senza pecorino" in recipe_requests[-1], "la richiesta scritta deve arrivare all'IA"
+        # Chiesto "solo prodotti in scadenza": l'app dice cosa ha trovato e divide le ricette.
+        page.wait_for_selector("text=Non ho trovato ricette con solo prodotti in scadenza")
+        page.wait_for_selector("text=Con prodotti in scadenza e altri")
+        page.wait_for_selector("text=Fatto da Gemini 3.8 Flash")
         page.wait_for_timeout(900)
         page.screenshot(path=f"{SHOTS}/15-ricette-risultati.png")
         page.evaluate("document.querySelector('main').scrollTo(0, 520)")

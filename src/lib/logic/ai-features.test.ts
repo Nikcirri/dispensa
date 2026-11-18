@@ -3,6 +3,10 @@ import type { Item } from '../types';
 import {
   buildRecipePrompt,
   DEFAULT_FILTERS,
+  groupRecipes,
+  onlyExpiringMessage,
+  recipeGroup,
+  wantsOnlyExpiring,
   parseRecipes,
   RECIPES_SCHEMA,
   recipeShareText,
@@ -161,7 +165,9 @@ describe('ricette', () => {
         { title: '', steps: [] },
       ],
     });
-    const list = parseRecipes(text, refs, 2, 'now')!;
+    const parsed = parseRecipes(text, refs, 2, 'now')!;
+    expect(parsed.note).toBe('');
+    const list = parsed.recipes;
     expect(list).toHaveLength(1);
     const r = list[0]!;
     expect(r.uses.map((u) => u.itemId)).toEqual(['a', 'b']);
@@ -181,5 +187,40 @@ describe('ricette', () => {
     const saver = { ...base, id: '2', title: 'Frittata', uses: [{ itemId: 'a', name: 'Zucchine', emoji: '🥒', amount: '' }] };
     expect(sortRecipes([slow, saver], items, TODAY).map((r) => r.id)).toEqual(['2', '1']);
     expect(RECIPES_SCHEMA.properties.recipes.items.required).toContain('uses');
+  });
+});
+
+describe('ricette: solo prodotti in scadenza', () => {
+  const items = [
+    item({ id: 'a', name: 'Zucchine', expiry: '2026-11-16' }),
+    item({ id: 'b', name: 'Biscotti', location: 'dispensa', expiry: '2026-11-10', expiryKind: 'tmc' }),
+    item({ id: 'c', name: 'Pasta', location: 'dispensa', expiry: '2027-05-01', expiryKind: 'tmc' }),
+  ];
+  const base = { emoji: '🍽️', minutes: 10, difficulty: 'facile' as const, servings: 2, missing: [], steps: ['x'], why: '', tip: '', createdAt: '' };
+  const use = (itemId: string, name: string) => ({ itemId, name, emoji: '🛒', amount: '' });
+  const onlyExp = { ...base, id: '1', title: 'Zucchine e biscotti', uses: [use('a', 'Zucchine'), use('b', 'Biscotti')] };
+  const mixed = { ...base, id: '2', title: 'Pasta e zucchine', uses: [use('a', 'Zucchine'), use('c', 'Pasta')] };
+  const other = { ...base, id: '3', title: 'Pasta in bianco', uses: [use('c', 'Pasta')] };
+
+  it('divide le ricette: solo in scadenza (anche un TMC passato), miste, altre', () => {
+    expect(recipeGroup(onlyExp, items, TODAY)).toBe('scadenza');
+    expect(recipeGroup(mixed, items, TODAY)).toBe('misto');
+    expect(recipeGroup(other, items, TODAY)).toBe('altro');
+    expect(groupRecipes([other, mixed, onlyExp], items, TODAY).map((g) => g.id)).toEqual(['scadenza', 'misto', 'altro']);
+  });
+
+  it('messaggio quando nessuna, alcune o tutte usano solo prodotti in scadenza', () => {
+    expect(onlyExpiringMessage(groupRecipes([mixed, other], items, TODAY))).toContain('Non ho trovato ricette con solo prodotti in scadenza');
+    expect(onlyExpiringMessage(groupRecipes([onlyExp, mixed], items, TODAY))).toBe('Una ricetta usa solo prodotti in scadenza; l’altra li usa insieme ad altri prodotti.');
+    expect(onlyExpiringMessage(groupRecipes([onlyExp], items, TODAY))).toContain('Ecco le ricette con solo prodotti in scadenza');
+  });
+
+  it('richiesta con la pillola o scritta in "Altro?", e istruzioni per l’IA', () => {
+    expect(wantsOnlyExpiring({ onlyExpiring: false, extra: 'Solo in scadenza' })).toBe(true);
+    expect(wantsOnlyExpiring({ onlyExpiring: false, extra: 'senza forno' })).toBe(false);
+    const { prompt } = buildRecipePrompt(items, TODAY, { ...DEFAULT_FILTERS, onlyExpiring: true }, { staples: [], glutenFree: false });
+    expect(prompt).toContain('Usa SOLO i prodotti in scadenza');
+    expect(RECIPES_SCHEMA.required).toContain('note');
+    expect(parseRecipes('{"recipes":[],"note":"Con i soli prodotti in scadenza non viene niente"}', [], 2, 'now')!.note).toContain('soli prodotti');
   });
 });

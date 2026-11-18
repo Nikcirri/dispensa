@@ -164,8 +164,17 @@ export async function getLastRecipes(db: PantryDB): Promise<Recipe[]> {
   return Array.isArray(row?.value) ? row.value.map(sanitizeRecipe).filter((r): r is Recipe => r !== null) : [];
 }
 
-export async function setLastRecipes(db: PantryDB, list: Recipe[]): Promise<void> {
-  await db.kv.put({ key: 'lastRecipes', value: JSON.parse(JSON.stringify(list)) as unknown });
+export async function setLastRecipes(db: PantryDB, list: Recipe[], note: { text: string; onlyExpiring: boolean } = { text: '', onlyExpiring: false }): Promise<void> {
+  await db.kv.bulkPut([
+    { key: 'lastRecipes', value: JSON.parse(JSON.stringify(list)) as unknown },
+    { key: 'lastRecipesNote', value: note },
+  ]);
+}
+
+/** Frase dell'IA sulle ultime ricette e se erano state chieste solo con prodotti in scadenza. */
+export async function getLastRecipesNote(db: PantryDB): Promise<{ text: string; onlyExpiring: boolean }> {
+  const v = (await db.kv.get('lastRecipesNote'))?.value as { text?: unknown; onlyExpiring?: unknown } | undefined;
+  return { text: typeof v?.text === 'string' ? v.text : '', onlyExpiring: v?.onlyExpiring === true };
 }
 
 // ---------- Backup ----------
@@ -192,6 +201,6 @@ export async function importAll(db: PantryDB, data: BackupData): Promise<void> {
     await db.templates.bulkPut(data.templates);
     await db.recipes.bulkPut(data.recipes);
     await saveSettings(db, data.settings);
-    await db.kv.delete('lastRecipes');
+    await db.kv.bulkDelete(['lastRecipes', 'lastRecipesNote']);
   });
 }

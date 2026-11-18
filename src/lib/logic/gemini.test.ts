@@ -15,6 +15,8 @@ import {
   looksBlank,
   looksLikeGeminiKey,
   modelLabel,
+  progressHeadline,
+  usedModelText,
   msToPacificMidnight,
   OVERALL_MS,
   PAID_RECHECK_MS,
@@ -286,5 +288,32 @@ describe('Gemini: tempi propri per le ricette', () => {
     expect(raceStep({ ...base, results: [null], sinceLastStart: OVERALL_MS - 1000, elapsed: OVERALL_MS, overallMs: OVERALL_MS + 30_000, staggerMs: OVERALL_MS })).toEqual({ type: 'wait' });
     expect(raceStep({ ...base, results: [null], sinceLastStart: STAGGER_MS, elapsed: STAGGER_MS, staggerMs: 35_000 })).toEqual({ type: 'wait' });
     expect(raceStep({ ...base, results: [null], sinceLastStart: 35_000, elapsed: 35_000, staggerMs: 35_000 })).toEqual({ type: 'start' });
+  });
+});
+
+describe('Gemini: avanzamento da mostrare', () => {
+  it('spiega cosa succede: un modello al lavoro, il secondo che parte, il limite finito, la risposta', () => {
+    expect(progressHeadline(null)).toBe('Scelgo il modello di Gemini…');
+    expect(progressHeadline({ seconds: 3, attempts: [{ model: 'gemini-3.8-flash', status: 'running', seconds: 3 }] })).toBe('Gemini 3.8 Flash sta lavorando');
+    expect(
+      progressHeadline({
+        seconds: 15,
+        attempts: [
+          { model: 'gemini-3.8-flash', status: 'running', seconds: 15 },
+          { model: 'gemini-3.6-flash', status: 'running', seconds: 1 },
+        ],
+      }),
+    ).toBe('3.8 Flash ci mette un po’: chiedo anche a 3.6 Flash');
+    expect(
+      progressHeadline({
+        seconds: 2,
+        attempts: [
+          { model: 'gemini-3.8-flash', status: 'quota', seconds: 1 },
+          { model: 'gemini-3.6-flash', status: 'running', seconds: 1 },
+        ],
+      }),
+    ).toBe('3.8 Flash: limite gratuito raggiunto. Provo con 3.6 Flash');
+    expect(usedModelText('gemini-3.8-flash', 9)).toBe('Fatto da Gemini 3.8 Flash in 9 s');
+    expect(usedModelText('gemini-3.8-flash', 0)).toBe('Fatto da Gemini 3.8 Flash in meno di un secondo');
   });
 });

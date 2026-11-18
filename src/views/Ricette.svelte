@@ -4,16 +4,19 @@
   import { reportError } from '../lib/errors';
   import { badgeText, daysLeft } from '../lib/logic/expiry';
   import { itemsToUseFirst } from '../lib/logic/pantry';
-  import { recipeWaitingMessage, type RecipeFilters } from '../lib/logic/recipes';
+  import { usedModelText } from '../lib/logic/gemini';
+  import { groupRecipes, onlyExpiringMessage, recipeWaitingMessage, type RecipeFilters } from '../lib/logic/recipes';
   import { tapFeedback } from '../lib/platform';
   import { app, hasAiKey, sheets } from '../lib/state/app.svelte';
   import { generateRecipes, loadRecipes, recipes, rememberFilters } from '../lib/state/recipes.svelte';
   import { showToast } from '../lib/state/ui.svelte';
+  import AiStatus from '../lib/ui/AiStatus.svelte';
   import Icon from '../lib/ui/Icon.svelte';
   import RecipeCard from './RecipeCard.svelte';
 
   type BoolFilter = Exclude<keyof RecipeFilters, 'servings' | 'extra'>;
   const PILLS: { id: BoolFilter; label: string }[] = [
+    { id: 'onlyExpiring', label: '⏰ Solo in scadenza' },
     { id: 'quick', label: '⏱️ < 20 min' },
     { id: 'light', label: '🥗 Leggero' },
     { id: 'pasta', label: '🍝 Voglia di pasta' },
@@ -24,13 +27,40 @@
 
   const first = $derived(itemsToUseFirst(app.items, app.today, 3));
   const list = $derived(recipes.view === 'salvate' ? recipes.saved : recipes.list);
+  // Le idee divise: solo con prodotti in scadenza, con prodotti in scadenza e altri, altre.
+  const groups = $derived(recipes.view === 'nuove' ? groupRecipes(recipes.list, app.items, app.today) : []);
+  const splitMessage = $derived(recipes.askedOnlyExpiring ? onlyExpiringMessage(groups) : '');
+  let showDetail = $state(false);
 
   let resultsEl = $state<HTMLElement | null>(null);
-  let extraInput = $state<HTMLInputElement | null>(null);
+  let extraInput = $state<HTMLTextAreaElement | null>(null);
 
-  /** Invio nel campo "Altro?": chiude la tastiera e genera subito le ricette con la richiesta. */
+  /** Il campo "Altro?" cresce mentre scrivi (fino a 4 righe), così vedi tutta la frase. */
+  function fitExtra() {
+    const el = extraInput;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight + 2, 140)}px`;
+  }
+
+  $effect(() => {
+    void recipes.filters.extra;
+    fitExtra();
+  });
+
+  /** Invio sulla tastiera (o la freccia) nel campo "Altro?": chiude la tastiera e genera le ricette. */
+  function onExtraKey(e: KeyboardEvent) {
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    sendExtra();
+  }
+
   function submitExtra(e: SubmitEvent) {
     e.preventDefault();
+    sendExtra();
+  }
+
+  function sendExtra() {
     extraInput?.blur();
     if (!app.items.length) {
       showToast('Prima aggiungi qualche prodotto alla dispensa.');
@@ -44,9 +74,14 @@
     loadRecipes().catch((e: unknown) => reportError(e));
   });
 
-  // Appena arrivano le ricette si scorre fino alla prima.
+  let loadingEl = $state<HTMLElement | null>(null);
+
+  // Mentre l'IA lavora si vede cosa sta facendo; appena arrivano le ricette si scorre fino alla prima.
   $effect(() => {
     const loading = recipes.loading;
+    if (loading && !wasLoading) {
+      setTimeout(() => loadingEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);
+    }
     if (wasLoading && !loading && resultsEl) {
       const el = resultsEl;
       setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
@@ -129,23 +164,29 @@
         <span class="num">👥 {recipes.filters.servings} {recipes.filters.servings === 1 ? 'persona' : 'persone'}</span>
         <button aria-label="Una persona in più" onclick={() => servings(1)}><Icon name="plus" size={18} /></button>
       </div>
-      <!-- Invio sulla tastiera = "Genera ricette" con la richiesta scritta. -->
-      <form class="extra-form" onsubmit={submitExtra}>
-        <input
-          class="input extra"
-          bind:this={extraInput}
-          bind:value={recipes.filters.extra}
-          placeholder="Altro? Es. senza forno"
-          maxlength="300"
-          autocomplete="off"
-          enterkeyhint="send"
-        />
-      </form>
     </div>
+    <!-- "Altro?": tutta la larghezza, va a capo; Invio o la freccia = "Genera ricette" con la richiesta. -->
+    <form class="extra-form" onsubmit={submitExtra}>
+      <textarea
+        class="input extra"
+        rows="1"
+        bind:this={extraInput}
+        bind:value={recipes.filters.extra}
+        oninput={fitExtra}
+        onkeydown={onExtraKey}
+        placeholder="Altro? Es. senza forno, per la cena, poco piccante…"
+        maxlength="300"
+        autocomplete="off"
+        enterkeyhint="send"
+      ></textarea>
+      <button class="circle-btn lime send" type="submit" aria-label="Genera ricette con questa richiesta" disabled={recipes.loading}>
+        <Icon name="chevronRight" size={22} stroke={2.6} />
+      </button>
+    </form>
 
     {#if recipes.loading}
-      <div class="loading" in:fade>
-        <p class="wait"><span class="spinner" aria-hidden="true"></span> {recipeWaitingMessage(recipes.seconds)}</p>
+      <div class="loading" bind:this={loadingEl} in:fade>
+        <AiStatus progress={recipes.progress} message={recipeWaitingMessage(recipes.seconds)} />
         {#each [0, 1, 2] as k (k)}
           <div class="skeleton" style:animation-delay="{k * 150}ms"></div>
         {/each}
@@ -162,14 +203,43 @@
 
 {#if !recipes.loading && list.length}
   <div bind:this={resultsEl} class="anchor"></div>
-  {#if recipes.view === 'nuove'}<h2 class="section-title">Le tue idee</h2>{/if}
-  <div class="results">
-    {#each list as r, i (r.id)}
-      <div in:fly={{ y: 16, duration: 260, delay: i * 80 }}>
-        <RecipeCard recipe={r} />
+  {#if recipes.view === 'nuove'}
+    {#if splitMessage || recipes.note}
+      <div class="ai-note" in:fade>
+        <span aria-hidden="true">💬</span>
+        <div>
+          {#if splitMessage}<p><strong>{splitMessage}</strong></p>{/if}
+          {#if recipes.note}<p>{recipes.note}</p>{/if}
+        </div>
+      </div>
+    {/if}
+    {#each groups as g (g.id)}
+      <h2 class="section-title group {g.id}">{g.title} <span class="num">{g.recipes.length}</span></h2>
+      <div class="results">
+        {#each g.recipes as r, i (r.id)}
+          <div in:fly={{ y: 16, duration: 260, delay: i * 80 }}>
+            <RecipeCard recipe={r} />
+          </div>
+        {/each}
       </div>
     {/each}
-  </div>
+    {#if recipes.usedModel}
+      <button class="used" onclick={() => (showDetail = !showDetail)} aria-expanded={showDetail}>
+        <Icon name="sparkles" size={16} />
+        <span>{usedModelText(recipes.usedModel, recipes.usedSeconds)}</span>
+        {#if recipes.detail}<Icon name={showDetail ? 'chevronDown' : 'chevronRight'} size={16} />{/if}
+      </button>
+      {#if showDetail && recipes.detail}<p class="detail used-detail">{recipes.detail}</p>{/if}
+    {/if}
+  {:else}
+    <div class="results">
+      {#each list as r, i (r.id)}
+        <div in:fly={{ y: 16, duration: 260, delay: i * 80 }}>
+          <RecipeCard recipe={r} />
+        </div>
+      {/each}
+    </div>
+  {/if}
   {#if recipes.view === 'nuove' && hasAiKey()}
     <button class="btn btn-block more" onclick={() => void generateRecipes(true)}><Icon name="refresh" /> Altre idee</button>
   {/if}
@@ -301,42 +371,28 @@
     padding: 0 4px;
   }
   .extra-form {
-    flex: 1;
-    min-width: 160px;
+    margin-top: 10px;
     display: flex;
+    align-items: flex-end;
+    gap: 8px;
   }
   .extra {
     flex: 1;
     min-width: 0;
-    min-height: 46px;
-    border-radius: 999px;
+    line-height: 1.4;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    overflow-y: auto;
+    min-height: 52px;
+    border-radius: 24px;
+    padding-left: 18px;
+    padding-right: 18px;
   }
   .loading {
     margin-top: 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;
-  }
-  .wait {
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 600;
-    color: var(--accent-text);
-  }
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 3px solid var(--accent-soft);
-    border-top-color: var(--accent);
-    animation: spin 0.9s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
   .skeleton {
     height: 170px;
@@ -368,6 +424,50 @@
   .detail {
     font-size: 0.8125rem;
     color: var(--text-muted);
+  }
+  .send {
+    width: 52px;
+    height: 52px;
+  }
+  .ai-note {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 20px;
+    background: var(--amber-soft);
+    color: var(--amber-text);
+    line-height: 1.45;
+    margin-bottom: 4px;
+  }
+  .ai-note p {
+    margin: 0;
+  }
+  .ai-note p + p {
+    margin-top: 4px;
+  }
+  .group.scadenza {
+    color: var(--red-text);
+  }
+  .group.misto {
+    color: var(--amber-text);
+  }
+  .used {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    padding: 6px 2px;
+    cursor: pointer;
+  }
+  .used-detail {
+    margin: 0 2px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.5;
   }
   .results {
     display: flex;

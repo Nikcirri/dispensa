@@ -15,10 +15,11 @@
   import Icon from '../../lib/ui/Icon.svelte';
   import Sheet from '../../lib/ui/Sheet.svelte';
 
-  let { request }: { request: { drafts: ProductDraft[]; note: string; shoppingIds?: string[] } } = $props();
+  let { request }: { request: { drafts: ProductDraft[]; note: string; shoppingIds?: string[]; aiInfo?: string } } = $props();
 
   const req = untrack(() => request);
   const note = req.note;
+  const aiInfo = req.aiInfo ?? '';
   const shoppingIds = req.shoppingIds ?? [];
   const fromShopping = shoppingIds.length > 0;
   let rows = $state(
@@ -67,6 +68,7 @@
         Ho trovato {plural(rows.length, 'prodotto', 'prodotti')}. Togli la spunta a quelli che non vuoi e controlla le date: quelle con ≈ sono stimate.
       {/if}
       {#if note}<br /><em>{note}</em>{/if}
+      {#if aiInfo}<br /><span class="ai-info">✨ {aiInfo}</span>{/if}
     </p>
 
     <ul class="rows">
@@ -108,6 +110,10 @@
     color: var(--accent-text);
     font-size: 0.9375rem;
     line-height: 1.45;
+  }
+  .ai-info {
+    font-size: 0.8125rem;
+    opacity: 0.8;
   }
   .rows {
     list-style: none;

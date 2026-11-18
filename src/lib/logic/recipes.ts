@@ -20,6 +20,8 @@ export interface RecipeFilters {
   vegetarian: boolean;
   /** 🏠 solo con quello che ho */
   onlyPantry: boolean;
+  /** ⏰ solo con i prodotti in scadenza */
+  onlyExpiring: boolean;
   servings: number;
   /** Richiesta libera ("per la cena", "senza forno"). */
   extra: string;
@@ -32,6 +34,7 @@ export const DEFAULT_FILTERS: RecipeFilters = {
   lactoseFree: false,
   vegetarian: false,
   onlyPantry: false,
+  onlyExpiring: false,
   servings: 2,
   extra: '',
 };
@@ -116,6 +119,11 @@ export function filterLines(f: RecipeFilters, glutenFree: boolean): string[] {
   if (f.vegetarian) out.push('Ricette vegetariane: niente carne né pesce (neanche brodo di carne o acciughe).');
   if (glutenFree) out.push('Senza glutine: niente pasta, pane o farine di frumento, orzo, farro, segale (vanno bene riso, mais, patate e prodotti "senza glutine").');
   if (f.onlyPantry) out.push('Usa SOLO i prodotti dell’elenco e quelli sempre in casa: "missing" deve essere vuoto.');
+  if (f.onlyExpiring) {
+    out.push(
+      'Usa SOLO i prodotti in scadenza dell’elenco (quelli con "SCADE OGGI", "SCADE DOMANI", "scade tra N giorni" o "termine minimo passato") più quelli sempre in casa: niente altri prodotti della dispensa. Se con questi soli non vengono ricette buone, proponi comunque ricette che li usano insieme ad altri prodotti e dillo in "note".',
+    );
+  }
   return out;
 }
 
@@ -148,9 +156,10 @@ export function buildRecipePrompt(
     '- "minutes": tempo totale realistico. "difficulty": "facile", "media" o "impegnativa".',
     '- "why": una frase su cosa salva dallo spreco (es. "Usa il latte e le zucchine che scadono domani").',
     '- "tip": un consiglio breve (varianti o come conservare gli avanzi).',
+    '- "note" (fuori dalle ricette): una frase per l’utente solo se non sei riuscito a rispettare una richiesta (es. "Con i soli prodotti in scadenza viene solo una ricetta: le altre usano anche la pasta"), altrimenti "".',
     '- Nomi e testi in italiano. Ricette vere e buone, non combinazioni strane solo per usare tutto.',
     'Rispondi SOLO con JSON valido, senza testo prima o dopo, con questa forma:',
-    '{"recipes":[{"title":"...","emoji":"🍝","minutes":20,"difficulty":"facile","servings":2,"uses":[{"ref":"p1","amount":"200 ml"}],"missing":[{"name":"...","amount":"..."}],"steps":["..."],"why":"...","tip":"..."}]}',
+    '{"recipes":[{"title":"...","emoji":"🍝","minutes":20,"difficulty":"facile","servings":2,"uses":[{"ref":"p1","amount":"200 ml"}],"missing":[{"name":"...","amount":"..."}],"steps":["..."],"why":"...","tip":"..."}],"note":""}',
   ]
     .filter(Boolean)
     .join('\n');
@@ -189,8 +198,9 @@ export const RECIPES_SCHEMA = {
         required: ['title', 'emoji', 'minutes', 'difficulty', 'servings', 'uses', 'missing', 'steps', 'why', 'tip'],
       },
     },
+    note: STR,
   },
-  required: ['recipes'],
+  required: ['recipes', 'note'],
 } as const;
 
 function str(v: unknown, max: number): string {
@@ -249,13 +259,22 @@ function parseRecipe(raw: unknown, refs: readonly PantryRef[], servings: number,
   };
 }
 
+export interface RecipeResult {
+  recipes: Recipe[];
+  /** Frase dell'IA per l'utente (es. una richiesta che non è riuscita a rispettare), anche vuota. */
+  note: string;
+}
+
 /** Risposta del modello → ricette (null se la risposta non si capisce). */
-export function parseRecipes(text: string, refs: readonly PantryRef[], servings: number, nowIso: string): Recipe[] | null {
+export function parseRecipes(text: string, refs: readonly PantryRef[], servings: number, nowIso: string): RecipeResult | null {
   const json = extractJson(text);
   if (typeof json !== 'object' || json === null) return null;
   const list = (json as Record<string, unknown>).recipes;
   if (!Array.isArray(list)) return null;
-  return list.map((r) => parseRecipe(r, refs, servings, nowIso)).filter((r): r is Recipe => r !== null).slice(0, 4);
+  return {
+    recipes: list.map((r) => parseRecipe(r, refs, servings, nowIso)).filter((r): r is Recipe => r !== null).slice(0, 4),
+    note: str((json as Record<string, unknown>).note, 300),
+  };
 }
 
 /** Legge una ricetta salvata (backup o memoria), scartando quelle rovinate. */
@@ -289,6 +308,8 @@ export interface UseStatus extends RecipeUse {
   /** Il prodotto è ancora in dispensa. */
   present: boolean;
   urgency: Urgency;
+  /** In scadenza: entro 5 giorni, oppure un "preferibilmente entro" già passato. */
+  expiring: boolean;
 }
 
 /** Stato attuale dei prodotti usati (il prodotto può essere stato consumato nel frattempo). */
@@ -296,13 +317,62 @@ export function useStatuses(recipe: Recipe, items: readonly Item[], today: strin
   const byId = new Map(items.map((i) => [i.id, i]));
   return recipe.uses.map((u) => {
     const item = u.itemId ? byId.get(u.itemId) : undefined;
-    return { ...u, present: !!item, urgency: item ? urgencyOf(daysLeft(item, today)) : 'nessuna' };
+    const d = item ? daysLeft(item, today) : null;
+    const expiring = !!item && d !== null && d <= 5 && (d >= 0 || item.expiryKind === 'tmc');
+    return { ...u, present: !!item, urgency: item ? urgencyOf(d) : 'nessuna', expiring };
   });
 }
 
-/** Quanti prodotti in scadenza (rossi, arancioni o oltre la data) salva la ricetta. */
+/** Quanti prodotti in scadenza salva la ricetta. */
 export function savedCount(statuses: readonly UseStatus[]): number {
-  return statuses.filter((s) => s.present && (s.urgency === 'rosso' || s.urgency === 'arancione' || s.urgency === 'scaduto')).length;
+  return statuses.filter((s) => s.present && s.expiring).length;
+}
+
+/**
+ * Gruppo della ricetta:
+ * - `scadenza`: usa solo prodotti in scadenza della dispensa (più quelli sempre in casa ed eventuali da comprare);
+ * - `misto`: usa prodotti in scadenza e anche altri della dispensa;
+ * - `altro`: non usa prodotti in scadenza.
+ */
+export type RecipeGroup = 'scadenza' | 'misto' | 'altro';
+
+export function recipeGroup(recipe: Recipe, items: readonly Item[], today: string): RecipeGroup {
+  const present = useStatuses(recipe, items, today).filter((s) => s.present);
+  const expiring = present.filter((s) => s.expiring).length;
+  if (!expiring) return 'altro';
+  return expiring === present.length ? 'scadenza' : 'misto';
+}
+
+export const GROUP_TITLES: Record<RecipeGroup, string> = {
+  scadenza: 'Solo con prodotti in scadenza',
+  misto: 'Con prodotti in scadenza e altri',
+  altro: 'Altre idee con quello che hai',
+};
+
+/** Ricette divise per gruppo (in ordine: solo in scadenza, misto, altro), senza gruppi vuoti. */
+export function groupRecipes(recipes: readonly Recipe[], items: readonly Item[], today: string): { id: RecipeGroup; title: string; recipes: Recipe[] }[] {
+  const order: RecipeGroup[] = ['scadenza', 'misto', 'altro'];
+  return order
+    .map((id) => ({ id, title: GROUP_TITLES[id], recipes: recipes.filter((r) => recipeGroup(r, items, today) === id) }))
+    .filter((g) => g.recipes.length > 0);
+}
+
+/** Vero se l'utente ha chiesto solo prodotti in scadenza (con la pillola o scrivendolo in "Altro?"). */
+export function wantsOnlyExpiring(f: Pick<RecipeFilters, 'onlyExpiring' | 'extra'>): boolean {
+  return f.onlyExpiring || /scaden|scadono|scade\b/i.test(f.extra);
+}
+
+/**
+ * Messaggio sopra le ricette quando si chiedevano solo prodotti in scadenza: se nessuna li usa da sola,
+ * lo si dice e si spiega cosa sono le altre; se solo alcune, si spiega la divisione. Vuoto se non serve.
+ */
+export function onlyExpiringMessage(groups: readonly { id: RecipeGroup; recipes: readonly Recipe[] }[]): string {
+  const only = groups.find((g) => g.id === 'scadenza')?.recipes.length ?? 0;
+  const others = groups.filter((g) => g.id !== 'scadenza').reduce((n, g) => n + g.recipes.length, 0);
+  if (!only && !others) return '';
+  if (!only) return 'Non ho trovato ricette con solo prodotti in scadenza: queste li usano insieme ad altri prodotti che hai.';
+  if (!others) return 'Ecco le ricette con solo prodotti in scadenza (più quelli sempre in casa).';
+  return `${only === 1 ? 'Una ricetta usa' : `${only} ricette usano`} solo prodotti in scadenza; ${others === 1 ? 'l’altra li usa' : 'le altre li usano'} insieme ad altri prodotti.`;
 }
 
 /** Ricette in ordine: prima quelle che salvano più prodotti in scadenza. */

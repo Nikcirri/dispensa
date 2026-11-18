@@ -12,6 +12,7 @@
   import { errorText, reportError, UserError } from '../lib/errors';
   import { watchForeground, inForeground } from '../lib/foreground';
   import { draftFromName, draftFromTemplate, type ProductDraft } from '../lib/logic/drafts';
+  import { usedModelText, type AiProgress } from '../lib/logic/gemini';
   import { scanWaitingMessage } from '../lib/logic/scan';
   import { tapFeedback } from '../lib/platform';
   import { templateByBarcode } from '../lib/repo';
@@ -36,6 +37,7 @@
   import { lookupBarcode } from '../lib/services/openfoodfacts';
   import { anySheetOpen, app, hasAiKey, sheets } from '../lib/state/app.svelte';
   import { busy, withBusy } from '../lib/state/ui.svelte';
+  import AiStatus from '../lib/ui/AiStatus.svelte';
   import Icon, { type IconName } from '../lib/ui/Icon.svelte';
   import ItemThumb from '../lib/ui/ItemThumb.svelte';
 
@@ -54,7 +56,7 @@
   let torchOn = $state(false);
   let visible = $state(inForeground());
   let scanningBarcode = $state(false);
-  let analyzing = $state<{ preview: string; seconds: number; mode: ScanMode } | null>(null);
+  let analyzing = $state<{ preview: string; seconds: number; mode: ScanMode; progress: AiProgress | null } | null>(null);
   let error = $state<{ message: string; detail: string } | null>(null);
   let runId = 0;
 
@@ -172,12 +174,14 @@
     }
     const id = ++runId;
     const t0 = Date.now();
-    analyzing = { preview: prepared.dataUrl, seconds: 0, mode };
+    analyzing = { preview: prepared.dataUrl, seconds: 0, mode, progress: null };
     const timer = setInterval(() => {
       if (analyzing && id === runId) analyzing.seconds = Math.round((Date.now() - t0) / 1000);
     }, 1000);
     try {
-      const res = await scanPhoto(app.aiKey, { base64: prepared.base64, mime: prepared.mime }, mode);
+      const res = await scanPhoto(app.aiKey, { base64: prepared.base64, mime: prepared.mime }, mode, '', (p) => {
+        if (analyzing && id === runId) analyzing.progress = p;
+      });
       if (id !== runId) return;
       const products = res.value.products;
       if (!products.length) {
@@ -191,7 +195,7 @@
         return;
       }
       void tapFeedback('medium');
-      openResults(products, res.value.note, prepared.thumb, mode);
+      openResults(products, res.value.note, prepared.thumb, mode, [usedModelText(res.model, res.seconds), res.detail].filter(Boolean).join(' · '));
     } catch (e) {
       if (id !== runId) return;
       error = { message: e instanceof UserError ? e.message : `Qualcosa è andato storto (${errorText(e)}).`, detail: e instanceof AiError ? e.detail : '' };
@@ -201,7 +205,7 @@
     }
   }
 
-  function openResults(products: ProductDraft[], note: string, thumb: string, mode: ScanMode) {
+  function openResults(products: ProductDraft[], note: string, thumb: string, mode: ScanMode, aiInfo: string) {
     if (products.length === 1) {
       const p = products[0]!;
       const hint = !p.name
@@ -211,10 +215,10 @@
           : p.expiry
             ? 'Data letta dall’etichetta: controlla che sia giusta.'
             : note;
-      sheets.product = { mode: 'new', draft: { ...p, thumb: mode === 'etichetta' ? thumb : undefined }, hint };
+      sheets.product = { mode: 'new', draft: { ...p, thumb: mode === 'etichetta' ? thumb : undefined }, hint, aiInfo };
       return;
     }
-    sheets.multi = { drafts: products.map((p) => ({ ...p, source: 'multi' as const })), note };
+    sheets.multi = { drafts: products.map((p) => ({ ...p, source: 'multi' as const })), note, aiInfo };
   }
 
   function cancelAnalysis() {
@@ -307,8 +311,7 @@
     <div class="stage">
       {#if analyzing}
         <div class="status" in:fade>
-          <span class="spinner" aria-hidden="true"></span>
-          <span>{scanWaitingMessage(analyzing.seconds, analyzing.mode)}</span>
+          <AiStatus dark progress={analyzing.progress} message={scanWaitingMessage(analyzing.seconds, analyzing.mode)} />
         </div>
       {:else if camera === 'unavailable' && problem}
         <div class="nocam">
@@ -565,26 +568,8 @@
     max-width: 92%;
   }
   .status {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 18px;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.6);
-    font-weight: 600;
-  }
-  .spinner {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 3px solid rgb(255 255 255 / 0.3);
-    border-top-color: #fff;
-    animation: spin 0.9s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    width: 92%;
+    max-width: 400px;
   }
   .nocam {
     max-width: 300px;

@@ -314,6 +314,9 @@
   .sort select {
     appearance: none;
     border: 0;
+    outline: none;
+    box-shadow: none;
+    border-radius: 10px;
     background: transparent;
     font-size: 0.9375rem;
     font-weight: 600;
@@ -321,6 +324,13 @@
     padding: 8px 18px 8px 2px;
     margin-right: -18px;
     cursor: pointer;
+  }
+  /* Android lascia il riquadro di selezione intorno al menu dopo la scelta: lo si toglie. */
+  .sort select:focus,
+  .sort select:focus-visible,
+  .sort select:active {
+    outline: none;
+    box-shadow: none;
   }
   .sort :global(svg) {
     pointer-events: none;

@@ -1,9 +1,10 @@
 // Stato della scheda "Cosa cucino?": filtri, ricette proposte, preferite. Resta quando si cambia scheda.
 import { db } from '../db';
 import { errorText } from '../errors';
-import { DEFAULT_FILTERS, sortRecipes, type Recipe, type RecipeFilters } from '../logic/recipes';
+import type { AiProgress } from '../logic/gemini';
+import { DEFAULT_FILTERS, sortRecipes, wantsOnlyExpiring, type Recipe, type RecipeFilters } from '../logic/recipes';
 import { tapFeedback } from '../platform';
-import { getLastRecipes, saveRecipe, savedRecipes, setLastRecipes, unsaveRecipe } from '../repo';
+import { getLastRecipes, getLastRecipesNote, saveRecipe, savedRecipes, setLastRecipes, unsaveRecipe } from '../repo';
 import { suggestRecipes } from '../services/ai';
 import { AiError } from '../services/gemini';
 import { app, updateSettings } from './app.svelte';
@@ -17,15 +18,26 @@ export const recipes = $state({
   loading: false,
   seconds: 0,
   error: null as string | null,
-  /** Riga tecnica dei tentativi (sotto l'errore). */
+  /** Riga tecnica dei tentativi (sotto l'errore o sotto le ricette). */
   detail: '',
   view: 'nuove' as 'nuove' | 'salvate',
+  /** Cosa sta facendo l'IA (modelli al lavoro), mentre aspetta. */
+  progress: null as AiProgress | null,
+  /** Modello che ha scritto le ultime ricette e in quanti secondi. */
+  usedModel: '',
+  usedSeconds: 0,
+  /** Frase dell'IA sulle ultime ricette (es. una richiesta che non ha potuto rispettare). */
+  note: '',
+  /** Le ultime ricette sono state chieste "solo con prodotti in scadenza". */
+  askedOnlyExpiring: false,
 });
 
 export async function loadRecipes(): Promise<void> {
   if (recipes.loaded) return;
-  const [last, saved] = await Promise.all([getLastRecipes(db), savedRecipes(db)]);
+  const [last, saved, note] = await Promise.all([getLastRecipes(db), savedRecipes(db), getLastRecipesNote(db)]);
   recipes.list = last;
+  recipes.note = note.text;
+  recipes.askedOnlyExpiring = note.onlyExpiring;
   recipes.saved = saved;
   const r = app.settings.recipes;
   recipes.filters = { ...DEFAULT_FILTERS, servings: r.servings, vegetarian: r.vegetarian, lactoseFree: r.lactoseFree };
@@ -51,25 +63,35 @@ export async function generateRecipes(more = false): Promise<void> {
   recipes.error = null;
   recipes.detail = '';
   recipes.seconds = 0;
+  recipes.progress = null;
   recipes.view = 'nuove';
   const t0 = Date.now();
   timer = setInterval(() => (recipes.seconds = Math.round((Date.now() - t0) / 1000)), 1000);
   void tapFeedback();
   try {
     const avoid = more ? recipes.list.map((r) => r.title) : [];
-    const res = await suggestRecipes(app.aiKey, $state.snapshot(app.items), $state.snapshot(recipes.filters), {
-      staples: app.settings.recipes.staples,
-      glutenFree: app.settings.recipes.glutenFree,
-      avoid,
-    });
-    recipes.list = sortRecipes(res.value, app.items, app.today);
-    await setLastRecipes(db, $state.snapshot(recipes.list));
+    const filters = $state.snapshot(recipes.filters) as RecipeFilters;
+    const res = await suggestRecipes(
+      app.aiKey,
+      $state.snapshot(app.items),
+      filters,
+      { staples: app.settings.recipes.staples, glutenFree: app.settings.recipes.glutenFree, avoid },
+      (p) => (recipes.progress = p),
+    );
+    recipes.list = sortRecipes(res.value.recipes, app.items, app.today);
+    recipes.note = res.value.note;
+    recipes.askedOnlyExpiring = wantsOnlyExpiring(filters);
+    recipes.usedModel = res.model;
+    recipes.usedSeconds = res.seconds;
+    recipes.detail = res.detail;
+    await setLastRecipes(db, $state.snapshot(recipes.list), { text: recipes.note, onlyExpiring: recipes.askedOnlyExpiring });
   } catch (e) {
     recipes.error = e instanceof Error ? e.message : `Qualcosa è andato storto (${errorText(e)}).`;
     recipes.detail = e instanceof AiError ? e.detail : '';
   } finally {
     clearInterval(timer);
     recipes.loading = false;
+    recipes.progress = null;
   }
 }
 

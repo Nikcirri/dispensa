@@ -1,5 +1,12 @@
 # Novità
 
+## [1.1.2] - 2026-11-18
+
+- Ricette: nuovo filtro "⏰ Solo in scadenza" e idee divise tra solo in scadenza, miste e altre.
+- Mentre l'IA lavora vedi quale modello di Gemini sta usando; alla fine chi l'ha fatto e in quanto.
+- Il campo "Altro?" è largo e va a capo: vedi tutta la frase. Ingranaggio dritto, niente riquadro su "Ordina".
+- Se chiedi solo prodotti in scadenza e non ci sono ricette, l'app te lo dice e propone quelle miste.
+
 ## [1.1.1] - 2026-11-18
 
 - Ricette: nel campo "Altro?" il tasto Invio della tastiera ora genera subito le ricette con la tua richiesta.

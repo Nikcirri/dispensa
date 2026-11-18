@@ -25,7 +25,8 @@
     sheets,
     type ProductRequest,
   } from '../../lib/state/app.svelte';
-  import { confirmDialog, showToast, withBusy } from '../../lib/state/ui.svelte';
+  import { confirmDialog, setBusyMessage, showToast, withBusy } from '../../lib/state/ui.svelte';
+  import { progressHeadline, usedModelText } from '../../lib/logic/gemini';
   import Icon, { type IconName } from '../../lib/ui/Icon.svelte';
   import ItemThumb from '../../lib/ui/ItemThumb.svelte';
   import QtyStepper from '../../lib/ui/QtyStepper.svelte';
@@ -40,6 +41,7 @@
   const itemId = req.itemId;
   const shoppingId = req.shoppingId;
   const hint = req.hint ?? '';
+  const aiInfo = req.aiInfo ?? '';
   let d = $state<ProductDraft>(JSON.parse(JSON.stringify(req.draft)) as ProductDraft);
   let showPicker = $state(false);
   let showMore = $state(mode === 'edit' && !!(d.brand || d.size || d.note || d.openDays));
@@ -135,7 +137,9 @@
       const blob = await takePhoto();
       if (!blob) return;
       const img = prepareCanvas(await blobToCanvas(blob), 1024);
-      const res = await withBusy('Leggo la data…', () => scanPhoto(app.aiKey, { base64: img.base64, mime: img.mime }, 'data', d.name || 'prodotto'));
+      const res = await withBusy('Leggo la data…', () =>
+        scanPhoto(app.aiKey, { base64: img.base64, mime: img.mime }, 'data', d.name || 'prodotto', (p) => setBusyMessage(`Leggo la data… ${progressHeadline(p)} (${p.seconds} s)`)),
+      );
       const found = res.value.products.find((p) => p.expiry && !p.expiryEstimated);
       if (!found?.expiry) {
         showToast('Non riesco a leggere la data: avvicinati, con più luce, oppure scrivila tu.', { duration: 4500 });
@@ -147,7 +151,7 @@
       d.expiryText = found.expiryText;
       touched.expiry = true;
       void tapFeedback('medium');
-      showToast(`Data letta: ${formatLong(found.expiry)}`);
+      showToast(`Data letta: ${formatLong(found.expiry)} · ${usedModelText(res.model, res.seconds)}`, { duration: 4000 });
     } catch (e) {
       reportError(e);
     }
@@ -221,7 +225,12 @@
 
 <Sheet title={mode === 'edit' ? 'Modifica prodotto' : 'Conferma prodotto'} onclose={close}>
   <div class="stack">
-    {#if hint}<p class="hintbox">{hint}</p>{/if}
+    {#if hint || aiInfo}
+      <div class="hintbox">
+        {#if hint}<p>{hint}</p>{/if}
+        {#if aiInfo}<p class="ai-info">✨ {aiInfo}</p>{/if}
+      </div>
+    {/if}
 
     <div class="head">
       <button class="pic" aria-label="Cambia icona" onclick={() => (showPicker = !showPicker)}>
@@ -357,6 +366,14 @@
 </Sheet>
 
 <style>
+  .hintbox p {
+    margin: 0;
+  }
+  .ai-info {
+    margin-top: 4px !important;
+    font-size: 0.8125rem;
+    opacity: 0.8;
+  }
   .hintbox {
     margin: 0;
     padding: 12px 14px;
