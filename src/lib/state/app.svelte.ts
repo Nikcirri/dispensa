@@ -54,6 +54,19 @@ export type MealRequest = { mode: 'new'; date: string; slot: MealSlot } | { mode
 /** Scegliere giorno e pasto: per mettere una ricetta nel piano o spostare un pasto. */
 export type PlanRequest = { recipe: Recipe } | { mealId: string };
 
+/** Più prodotti da mettere in dispensa insieme: dalla foto della spesa, dallo scontrino o dalla lista della spesa. */
+export interface MultiRequest {
+  drafts: ProductDraft[];
+  note: string;
+  /** `spesa`: spuntati nella lista della spesa; `foto`: la spesa fotografata sul tavolo; `scontrino`: lo scontrino. */
+  kind: 'spesa' | 'foto' | 'scontrino';
+  /** Righe della lista della spesa da togliere (kind `spesa`). */
+  shoppingIds?: string[];
+  aiInfo?: string;
+  /** Negozio letto sullo scontrino. */
+  store?: string;
+}
+
 /** "Com'è andata?": aggiornare la dispensa dopo aver cucinato una ricetta o un pasto del piano. */
 export interface CookedRequest {
   /** La ricetta (null per un pasto scritto a mano senza ingredienti). */
@@ -81,7 +94,7 @@ export interface ProductRequest {
 
 export const sheets = $state({
   product: null as ProductRequest | null,
-  multi: null as { drafts: ProductDraft[]; note: string; shoppingIds?: string[]; aiInfo?: string } | null,
+  multi: null as MultiRequest | null,
   settings: false,
   stats: false,
   aiKey: false,

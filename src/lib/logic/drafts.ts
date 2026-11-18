@@ -26,6 +26,8 @@ export interface ProductDraft {
   /** La data come è scritta sulla confezione (letta dall'IA). */
   expiryText?: string;
   note?: string;
+  /** La riga dello scontrino da cui viene (es. "MOZZ.FDL 125G"): si mostra per controllare. */
+  receiptLine?: string;
 }
 
 /** Bozza dal solo nome: icona, posto e durata indovinati. */

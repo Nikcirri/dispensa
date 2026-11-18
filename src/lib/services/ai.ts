@@ -14,6 +14,7 @@ import {
   type RecipeResult,
   type StepsResult,
 } from '../logic/recipes';
+import { buildReceiptPrompt, parseReceipt, RECEIPT_SCHEMA, type ReceiptResult } from '../logic/receipt';
 import { buildScanPrompt, parseScan, SCAN_SCHEMA, type ScanMode, type ScanResult } from '../logic/scan';
 import type { Item } from '../types';
 import { runGemini, type GeminiResult } from './gemini';
@@ -36,6 +37,24 @@ export async function scanPhoto(
     fullTimeoutMs: mode === 'multi' ? 45_000 : 30_000,
     timeoutMs: mode === 'multi' ? 60_000 : 45_000,
     overallMs: mode === 'multi' ? 100_000 : 75_000,
+    onProgress,
+  });
+}
+
+/** Lo scontrino della spesa: tutti i prodotti alimentari, con la data stimata dal giorno della spesa. */
+export async function scanReceipt(key: string, image: { base64: string; mime: string }, onProgress?: (p: AiProgress) => void): Promise<GeminiResult<ReceiptResult>> {
+  const today = todayKey();
+  return runGemini(key, {
+    prompt: buildReceiptPrompt(today),
+    image,
+    schema: RECEIPT_SCHEMA,
+    parse: (text) => parseReceipt(text, today),
+    isEmpty: (r) => r.products.length === 0,
+    // Uno scontrino lungo è una risposta lunga: più tempo che per una foto sola.
+    fullTimeoutMs: 50_000,
+    timeoutMs: 65_000,
+    overallMs: 120_000,
+    staggerMs: 25_000,
     onProgress,
   });
 }

@@ -1,11 +1,3 @@
-<script lang="ts" module>
-  import type { ScanMode } from '../lib/logic/scan';
-
-  type AddMode = 'etichetta' | 'barcode' | 'multi';
-  // La modalità scelta resta quando si cambia scheda.
-  const pref = $state({ mode: 'etichetta' as AddMode });
-</script>
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -13,11 +5,14 @@
   import { watchForeground, inForeground } from '../lib/foreground';
   import { draftFromName, draftFromTemplate, type ProductDraft } from '../lib/logic/drafts';
   import { usedModelText, type AiProgress } from '../lib/logic/gemini';
-  import { scanWaitingMessage } from '../lib/logic/scan';
+  import { addReceiptPart, receiptWaitingMessage } from '../lib/logic/receipt';
+  import { scanWaitingMessage, type ScanMode } from '../lib/logic/scan';
+  import { plural } from '../lib/logic/text';
+  import { addPref as pref, clearReceipt, receipt, type AddMode } from '../lib/state/add.svelte';
   import { tapFeedback } from '../lib/platform';
   import { templateByBarcode } from '../lib/repo';
   import { db } from '../lib/db';
-  import { scanPhoto } from '../lib/services/ai';
+  import { scanPhoto, scanReceipt } from '../lib/services/ai';
   import { scanBarcode } from '../lib/services/barcode';
   import {
     blobToCanvas,
@@ -43,9 +38,13 @@
 
   const MODES: { id: AddMode; label: string; icon: IconName; hint: string }[] = [
     { id: 'etichetta', label: 'Foto prodotto', icon: 'tag', hint: 'Inquadra il prodotto con la data di scadenza ben visibile' },
+    { id: 'scontrino', label: 'Scontrino', icon: 'receipt', hint: 'Stendi lo scontrino con buona luce e inquadralo tutto' },
     { id: 'barcode', label: 'Codice a barre', icon: 'barcode', hint: 'Tocca il pulsante e inquadra il codice a barre' },
-    { id: 'multi', label: 'Spesa intera', icon: 'receipt', hint: 'Fotografa la spesa sul tavolo oppure lo scontrino' },
+    { id: 'multi', label: 'Spesa intera', icon: 'box', hint: 'Fotografa i prodotti della spesa sul tavolo' },
   ];
+
+  /** Cosa si sta leggendo: un prodotto, la spesa sul tavolo o lo scontrino. */
+  type Reading = ScanMode | 'scontrino';
 
   let video = $state<HTMLVideoElement | null>(null);
   let frameEl = $state<HTMLElement | null>(null);
@@ -56,7 +55,7 @@
   let torchOn = $state(false);
   let visible = $state(inForeground());
   let scanningBarcode = $state(false);
-  let analyzing = $state<{ preview: string; seconds: number; mode: ScanMode; progress: AiProgress | null } | null>(null);
+  let analyzing = $state<{ preview: string; seconds: number; mode: Reading; progress: AiProgress | null } | null>(null);
   let error = $state<{ message: string; detail: string } | null>(null);
   let runId = 0;
 
@@ -139,10 +138,10 @@
     try {
       if (camera === 'live' && video) {
         const canvas = captureFrame(video, pref.mode === 'etichetta' ? frameRect() : null);
-        await analyze(canvas, pref.mode);
+        await analyze(canvas, reading(pref.mode));
       } else {
         const blob = await takePhoto();
-        if (blob) await analyze(await blobToCanvas(blob), pref.mode);
+        if (blob) await analyze(await blobToCanvas(blob), reading(pref.mode));
       }
     } catch (e) {
       reportError(e, 'Non riesco a scattare la foto. Riprova.');
@@ -158,13 +157,18 @@
     try {
       stopCamera();
       const blob = await choosePhoto();
-      if (blob) await analyze(await blobToCanvas(blob), pref.mode === 'multi' ? 'multi' : 'etichetta');
+      if (blob) await analyze(await blobToCanvas(blob), reading(pref.mode));
     } catch (e) {
       reportError(e, 'Non riesco ad aprire la foto.');
     }
   }
 
-  async function analyze(canvas: HTMLCanvasElement, mode: ScanMode) {
+  function reading(m: AddMode): Reading {
+    return m === 'scontrino' ? 'scontrino' : m === 'multi' ? 'multi' : 'etichetta';
+  }
+
+  async function analyze(canvas: HTMLCanvasElement, mode: Reading) {
+    if (mode === 'scontrino') return analyzeReceipt(canvas);
     let prepared: PreparedImage;
     try {
       prepared = prepareCanvas(canvas, mode === 'multi' ? 1280 : 1024);
@@ -205,6 +209,58 @@
     }
   }
 
+  /** Scontrino: tutti i prodotti alimentari (anche in più foto, se è lungo), con le date stimate da controllare. */
+  async function analyzeReceipt(canvas: HTMLCanvasElement) {
+    let prepared: PreparedImage;
+    try {
+      // Le scritte dello scontrino sono piccole: la foto resta più grande.
+      prepared = prepareCanvas(canvas, 2000);
+    } catch (e) {
+      reportError(e);
+      return;
+    }
+    const id = ++runId;
+    const t0 = Date.now();
+    analyzing = { preview: prepared.dataUrl, seconds: 0, mode: 'scontrino', progress: null };
+    const timer = setInterval(() => {
+      if (analyzing && id === runId) analyzing.seconds = Math.round((Date.now() - t0) / 1000);
+    }, 1000);
+    try {
+      const res = await scanReceipt(app.aiKey, { base64: prepared.base64, mime: prepared.mime }, (p) => {
+        if (analyzing && id === runId) analyzing.progress = p;
+      });
+      if (id !== runId) return;
+      if (!res.value.products.length) {
+        error = {
+          message: res.value.note || 'Non trovo prodotti da mangiare sullo scontrino. Riprova con più luce, con lo scontrino ben steso e tutto nel riquadro.',
+          detail: res.detail,
+        };
+        return;
+      }
+      void tapFeedback('medium');
+      const drafts = receipt.pending ? addReceiptPart(receipt.pending, res.value.products) : res.value.products;
+      const store = receipt.store || res.value.store;
+      clearReceipt();
+      sheets.multi = {
+        drafts,
+        note: res.value.note,
+        kind: 'scontrino',
+        store,
+        aiInfo: [usedModelText(res.model, res.seconds), res.detail].filter(Boolean).join(' · '),
+      };
+    } catch (e) {
+      if (id !== runId) return;
+      error = { message: e instanceof UserError ? e.message : `Qualcosa è andato storto (${errorText(e)}).`, detail: e instanceof AiError ? e.detail : '' };
+    } finally {
+      clearInterval(timer);
+      if (id === runId) analyzing = null;
+    }
+  }
+
+  function waitingMessage(seconds: number, mode: Reading): string {
+    return mode === 'scontrino' ? receiptWaitingMessage(seconds) : scanWaitingMessage(seconds, mode);
+  }
+
   function openResults(products: ProductDraft[], note: string, thumb: string, mode: ScanMode, aiInfo: string) {
     if (products.length === 1) {
       const p = products[0]!;
@@ -218,7 +274,7 @@
       sheets.product = { mode: 'new', draft: { ...p, thumb: mode === 'etichetta' ? thumb : undefined }, hint, aiInfo };
       return;
     }
-    sheets.multi = { drafts: products.map((p) => ({ ...p, source: 'multi' as const })), note, aiInfo };
+    sheets.multi = { drafts: products.map((p) => ({ ...p, source: 'multi' as const })), note, kind: 'foto', aiInfo };
   }
 
   function cancelAnalysis() {
@@ -311,7 +367,7 @@
     <div class="stage">
       {#if analyzing}
         <div class="status" in:fade>
-          <AiStatus dark progress={analyzing.progress} message={scanWaitingMessage(analyzing.seconds, analyzing.mode)} />
+          <AiStatus dark progress={analyzing.progress} message={waitingMessage(analyzing.seconds, analyzing.mode)} />
         </div>
       {:else if camera === 'unavailable' && problem}
         <div class="nocam">
@@ -325,6 +381,12 @@
           {#if pref.mode === 'barcode'}<span class="laser" aria-hidden="true"></span>{/if}
         </div>
         <p class="hint">{current.hint}</p>
+        {#if pref.mode === 'scontrino' && receipt.pending}
+          <div class="continue">
+            <span>🧾 {plural(receipt.pending.length, 'prodotto', 'prodotti')} finora: fotografa il pezzo che manca</span>
+            <button class="btn btn-small glass" onclick={clearReceipt}>Ricomincia</button>
+          </div>
+        {/if}
       {/if}
     </div>
 
@@ -497,11 +559,37 @@
     width: 84%;
     aspect-ratio: 2.2 / 1;
   }
-  .frame.multi {
-    width: 92%;
+  /* Spesa e scontrino: il riquadro prende lo spazio libero (senza finire sotto i comandi). */
+  .frame.multi,
+  .frame.scontrino {
+    flex: 1 1 0;
+    min-height: 0;
+    width: auto;
+    max-width: 92%;
     aspect-ratio: 3 / 4;
-    max-height: 100%;
     box-shadow: none;
+  }
+  /* Scontrino: riquadro alto e stretto, per farci stare tutte le righe. */
+  .frame.scontrino {
+    aspect-ratio: 9 / 16;
+  }
+  .continue {
+    flex: none;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    background: rgb(0 0 0 / 0.6);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  .continue span {
+    flex: 1;
+    min-width: 0;
   }
   .frame.dim {
     box-shadow: none;
@@ -559,9 +647,10 @@
     }
   }
   .hint {
+    flex: none;
     margin: 0;
     padding: 8px 14px;
-    border-radius: 999px;
+    border-radius: 18px;
     background: rgb(0 0 0 / 0.5);
     font-size: 0.9375rem;
     text-align: center;

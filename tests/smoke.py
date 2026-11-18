@@ -5,6 +5,7 @@ Uso: python3 tests/smoke.py [larghezza]   (screenshot in tests/screenshots/)
 Non serve internet: le richieste a Gemini sono intercettate.
 """
 import http.server
+import datetime
 import json
 import os
 import socketserver
@@ -47,6 +48,33 @@ MULTI = {
         {"name": "Penne rigate", "brand": "Barilla", "size": "500 g", "emoji": "🍝", "location": "dispensa", "quantity": 1, "unit": "pz", "expiry": "", "expiryText": "", "expiryKind": "tmc", "shelfDays": 540, "openDays": 0},
     ],
     "note": "Scontrino un po' sfocato in fondo",
+}
+
+# Scontrino lungo in due foto: la seconda ripete le ultime righe della prima (non vanno contate due volte).
+def receipt_line(line, name, emoji, location, shelf, kind="scadenza", quantity=1, unit="pz", size=""):
+    return {"line": line, "name": name, "brand": "", "size": size, "emoji": emoji, "location": location, "quantity": quantity, "unit": unit,
+            "expiryKind": kind, "shelfDays": shelf, "openDays": 3 if kind == "scadenza" else 0}
+
+
+RECEIPT_1 = {
+    "store": "Coop",
+    "purchaseDate": "",
+    "products": [
+        receipt_line("YOGURT BIANCO X2", "Yogurt bianco", "🥛", "frigo", 20, quantity=2),
+        receipt_line("PETTO POLLO 0,520KG", "Petto di pollo", "🍗", "frigo", 3, quantity=520, unit="g"),
+        receipt_line("CAFFE MACIN. 250G", "Caffè macinato", "☕", "dispensa", 365, kind="tmc", size="250 g"),
+    ],
+    "note": "",
+}
+RECEIPT_2 = {
+    "store": "Coop",
+    "purchaseDate": "",
+    "products": [
+        receipt_line("CAFFE MACIN. 250G", "Caffè macinato", "☕", "dispensa", 365, kind="tmc", size="250 g"),
+        receipt_line("SPINACI BUSTA 200G", "Spinaci in busta", "🥬", "frigo", 5, size="200 g"),
+        receipt_line("RISO CARNAROLI 1KG", "Riso carnaroli", "🍚", "dispensa", 720, kind="tmc", size="1 kg"),
+    ],
+    "note": "",
 }
 
 # Piano dell'IA: piatti senza procedimento (si scrive dopo, quando si apre il piatto).
@@ -114,6 +142,7 @@ def main():
     errors = []
     next_scan = {"payload": SCAN}
     recipe_requests = []
+    receipts = [RECEIPT_1, RECEIPT_2]
     # La prima richiesta di ricette resta in attesa: serve a fotografare "cosa sta facendo l'IA".
     held = {"hold": False, "routes": []}
     with sync_playwright() as p:
@@ -133,6 +162,8 @@ def main():
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}))
             elif '"meals"' in body:
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(PLAN))
+            elif '"purchaseDate"' in body:
+                r.fulfill(status=200, content_type="application/json", body=gemini_reply(receipts.pop(0) if receipts else RECEIPT_2))
             elif "Scrivi il procedimento" in body:
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(STEPS))
             elif '"recipes"' in body:
@@ -299,6 +330,47 @@ def main():
         page.screenshot(path=f"{SHOTS}/20-spesa-in-dispensa.png")
         page.locator("button.btn-primary:has-text('Aggiungi')").click()
         page.wait_for_timeout(500)
+
+        # Scontrino: dalla Spesa si fotografa lo scontrino (lungo: due foto), si controllano le date dei freschi e si salva.
+        page.wait_for_selector("text=Hai fatto la spesa?")
+        assert page.locator("button.tick[aria-label='Preso: Caffè']").count() == 1, "il caffè deve essere nella lista della spesa"
+        page.click("text=Hai fatto la spesa?")
+        page.wait_for_selector("text=Stendi lo scontrino")
+        page.wait_for_timeout(1200)
+        page.screenshot(path=f"{SHOTS}/20b-scontrino-mirino.png")
+        page.click("button[aria-label='Scatta']")
+        page.wait_for_selector("text=Dallo scontrino", timeout=20000)
+        page.wait_for_selector("text=Freschi: controlla la data")
+        names = page.locator(".rows input.name").evaluate_all("els => els.map(e => e.value)")
+        assert names == ["Yogurt bianco", "Petto di pollo", "Caffè macinato"], f"prima i freschi da controllare: {names}"
+        # La data dello yogurt si corregge a mano; poi si fotografa il resto dello scontrino.
+        yogurt_date = (datetime.date.today() + datetime.timedelta(days=12)).isoformat()
+        page.fill("input[aria-label='Scadenza di Yogurt bianco']", yogurt_date)
+        page.click("button[aria-label='Fotografa il resto dello scontrino']")
+        page.wait_for_selector("text=3 prodotti finora")
+        page.wait_for_timeout(1200)
+        page.screenshot(path=f"{SHOTS}/20c-scontrino-altra-foto.png")
+        page.click("button[aria-label='Scatta']")
+        page.wait_for_selector("text=Dallo scontrino", timeout=20000)
+        page.wait_for_timeout(300)
+        names = page.locator(".rows input.name").evaluate_all("els => els.map(e => e.value)")
+        assert sorted(names) == sorted(["Yogurt bianco", "Petto di pollo", "Caffè macinato", "Spinaci in busta", "Riso carnaroli"]), f"scontrino in due foto senza doppioni: {names}"
+        assert page.locator("input[aria-label='Scadenza di Yogurt bianco']").input_value() == yogurt_date, "la data corretta a mano deve restare"
+        page.screenshot(path=f"{SHOTS}/20d-scontrino.png")
+        page.evaluate("document.querySelector('.sheet .body').scrollTo(0, 99999)")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/20e-scontrino-fondo.png")
+        page.click("button.btn-primary:has-text('Aggiungi 5 prodotti')")
+        page.wait_for_selector("text=tolto dalla lista della spesa")
+        page.wait_for_timeout(400)
+        assert page.locator("button.tick[aria-label='Preso: Caffè']").count() == 0, "il caffè comprato deve sparire dalla lista della spesa"
+        page.click("nav button:has-text('Dispensa')")
+        page.fill("input[placeholder='Cerca in dispensa…']", "yogurt bianco")
+        page.wait_for_timeout(400)
+        assert page.locator("text=Yogurt bianco").count() >= 1, "lo yogurt dello scontrino deve essere in dispensa"
+        page.fill("input[placeholder='Cerca in dispensa…']", "")
+        page.click("nav button:has-text('Spesa')")
+        page.wait_for_timeout(300)
 
         # Piano dei pasti
         page.click("nav button:has-text('Pasti')")

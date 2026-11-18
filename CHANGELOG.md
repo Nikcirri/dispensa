@@ -1,5 +1,13 @@
 # Novità
 
+## [1.3.0] - 2026-11-18
+
+- Nuovo: fotografa lo scontrino e tutti i prodotti della spesa vanno in dispensa. Controlli solo le date.
+- In Spesa tocca "Hai fatto la spesa?": quello che hai comprato sparisce da solo dalla lista.
+- Scontrino lungo? Fai più foto: i prodotti si uniscono senza doppioni.
+- Per i freschi tocca 📷 accanto alla data per leggerla dalla confezione, oppure scrivila tu.
+- In Aggiungi c'è la nuova modalità "Scontrino"; "Spesa intera" resta per i prodotti sul tavolo.
+
 ## [1.2.3] - 2026-11-18
 
 - Un prodotto comprato di nuovo si somma a quello che c'è (es. "Latte 2 pz"): niente più doppioni.

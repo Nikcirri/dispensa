@@ -50,29 +50,40 @@ function sameName(a: string, b: string): boolean {
 }
 
 /**
+ * Quanto due nomi indicano lo stesso prodotto: `exact` (stesso nome), `same` (stesse parole al singolare/plurale),
+ * `contains` (lo stesso prodotto con qualche parola in più, es. "Latte" → "Latte parzialmente scremato":
+ * la prima parola deve essere la stessa e le parole in più non fanno un prodotto diverso), altrimenti null.
+ */
+export function nameMatch(wanted: string, have: string): 'exact' | 'same' | 'contains' | null {
+  const target = nameStems(wanted);
+  if (!target.length) return null;
+  if (normalize(have) === normalize(wanted)) return 'exact';
+  const stems = nameStems(have);
+  if (stems.join(' ') === target.join(' ')) return 'same';
+  if (stems[0] !== target[0] || !target.every((t) => stems.includes(t))) return null;
+  const extra = words(have).filter((w) => !target.includes(stem(w)));
+  return extra.some((w) => OTHER_PRODUCT.some((o) => w.startsWith(o))) ? null : 'contains';
+}
+
+/**
  * Il prodotto della dispensa che corrisponde a un ingrediente scritto ("Pomodori pelati", "Uova"):
- * stesso nome, oppure stesse parole al singolare/plurale, oppure lo stesso prodotto con qualche parola in più
- * ("Latte" → "Latte parzialmente scremato": la prima parola deve essere la stessa), ma non un prodotto diverso.
+ * prima lo stesso nome, poi le stesse parole, poi il nome più corto che lo contiene (vedi `nameMatch`).
  */
 export function findInPantry(name: string, items: readonly Item[], exclude: ReadonlySet<string> = new Set()): Item | null {
-  const target = nameStems(name);
-  if (!target.length) return null;
   const candidates = items.filter((i) => !exclude.has(i.id));
-  const n = normalize(name);
-  const exact = candidates.find((i) => normalize(i.name) === n);
-  if (exact) return exact;
-  const key = target.join(' ');
-  const same = candidates.find((i) => nameStems(i.name).join(' ') === key);
-  if (same) return same;
-  const containing = candidates
-    .filter((i) => {
-      const stems = nameStems(i.name);
-      if (stems[0] !== target[0] || !target.every((t) => stems.includes(t))) return false;
-      const extra = words(i.name).filter((w) => !target.includes(stem(w)));
-      return !extra.some((w) => OTHER_PRODUCT.some((o) => w.startsWith(o)));
-    })
-    .sort((a, b) => a.name.length - b.name.length);
-  return containing[0] ?? null;
+  for (const level of ['exact', 'same'] as const) {
+    const found = candidates.find((i) => nameMatch(name, i.name) === level);
+    if (found) return found;
+  }
+  return candidates.filter((i) => nameMatch(name, i.name) === 'contains').sort((a, b) => a.name.length - b.name.length)[0] ?? null;
+}
+
+/**
+ * Le righe della lista della spesa comprate: quelle che corrispondono a uno dei prodotti
+ * (es. "latte" nella lista e "Latte parzialmente scremato" dallo scontrino).
+ */
+export function boughtShoppingIds(shopping: readonly { id: string; name: string }[], productNames: readonly string[]): string[] {
+  return shopping.filter((s) => productNames.some((n) => nameMatch(s.name, n) !== null)).map((s) => s.id);
 }
 
 /**

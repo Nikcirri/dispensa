@@ -14,7 +14,7 @@ export type Unit = 'pz' | 'conf' | 'g' | 'kg' | 'ml' | 'l';
 export type ExpiryKind = 'scadenza' | 'tmc';
 
 /** Come è stato aggiunto il prodotto. */
-export type ItemSource = 'foto' | 'barcode' | 'multi' | 'mano' | 'spesa' | 'ricordato';
+export type ItemSource = 'foto' | 'barcode' | 'multi' | 'scontrino' | 'mano' | 'spesa' | 'ricordato';
 
 export interface Item {
   id: string;

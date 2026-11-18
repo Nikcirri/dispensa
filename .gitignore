@@ -10,3 +10,4 @@ dist/
 *.p12
 keystore*.txt
 tests/screenshots/
+__pycache__/

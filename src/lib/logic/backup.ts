@@ -61,7 +61,7 @@ export function sanitizeItem(v: unknown): Item | null {
     barcode: optStr(v.barcode),
     imageUrl: optStr(v.imageUrl),
     thumb: isStr(v.thumb) && v.thumb.startsWith('data:image/') ? v.thumb : undefined,
-    source: v.source === 'foto' || v.source === 'barcode' || v.source === 'multi' || v.source === 'spesa' || v.source === 'ricordato' ? v.source : 'mano',
+    source: v.source === 'foto' || v.source === 'barcode' || v.source === 'multi' || v.source === 'scontrino' || v.source === 'spesa' || v.source === 'ricordato' ? v.source : 'mano',
     addedAt: isStr(v.addedAt) ? v.addedAt : new Date().toISOString(),
     updatedAt: isStr(v.updatedAt) ? v.updatedAt : new Date().toISOString(),
     note: optStr(v.note),

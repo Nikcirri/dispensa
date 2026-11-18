@@ -15,6 +15,7 @@
   import { addShopping, deleteShopping, updateShopping } from '../lib/repo';
   import { shareText } from '../lib/services/share';
   import { app, reloadShopping, sheets } from '../lib/state/app.svelte';
+  import { startReceipt } from '../lib/state/add.svelte';
   import { addMissingToShopping } from '../lib/state/meals.svelte';
   import { showToast, showUndoToast } from '../lib/state/ui.svelte';
   import Icon from '../lib/ui/Icon.svelte';
@@ -97,7 +98,7 @@
       return t ? { ...draftFromTemplate(t, app.today), source: 'spesa' as const } : draftFromName(s.name, app.today, 'spesa');
     });
     if (!drafts.length) return;
-    sheets.multi = { drafts, note: '', shoppingIds: done.map((s) => s.id) };
+    sheets.multi = { drafts, note: '', kind: 'spesa', shoppingIds: done.map((s) => s.id) };
   }
 
   async function share() {
@@ -133,6 +134,15 @@
     <input class="input" bind:value={text} placeholder="Aggiungi: latte, pane, uova…" autocomplete="off" enterkeyhint="done" />
     <button class="circle-btn lime addbtn" type="submit" aria-label="Aggiungi alla lista" disabled={!text.trim()}><Icon name="plus" size={24} stroke={2.6} /></button>
   </form>
+
+  <button class="card receipt" onclick={startReceipt}>
+    <span class="icon-tile"><Icon name="receipt" /></span>
+    <span class="grow">
+      <strong>Hai fatto la spesa?</strong>
+      <span>Fotografa lo scontrino: metto tutto in dispensa e tolgo dalla lista quello che hai comprato.</span>
+    </span>
+    <Icon name="chevronRight" size={20} />
+  </button>
 
   {#if forMeals.length}
     <section class="card meals-card">
@@ -236,6 +246,27 @@
     padding-left: 22px;
     line-height: 1.5;
     overflow-wrap: anywhere;
+  }
+  .receipt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 0;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+    width: 100%;
+  }
+  .receipt .grow {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .receipt .grow span {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.4;
   }
   .have {
     display: block;
