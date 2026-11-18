@@ -8,6 +8,7 @@ sull'altro telefono con il nome di chi le ha cambiate, le cancellazioni, la riap
 """
 import json
 import os
+import re
 import sys
 
 from playwright.sync_api import sync_playwright
@@ -76,9 +77,10 @@ def run(browser, url, errors, pages):
         page.wait_for_timeout(250)
 
     def open_house(page):
+        tab(page, "Dispensa")
         page.click("button[aria-label='Impostazioni']")
-        page.click("text=Casa condivisa")
-        page.wait_for_selector(".sheet >> text=Casa condivisa")
+        page.locator("button.row", has_text=re.compile("Condividi con chi vive con te|Casa condivisa")).first.click()
+        page.wait_for_selector("h2:has-text('Casa condivisa')")
 
     def close_sheets(page):
         while page.locator("button[aria-label='Chiudi']").count():
