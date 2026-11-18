@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: 'com.nikcirri.dispensa',
   appName: 'Dispensa',
   webDir: 'dist',
-  backgroundColor: '#F8F9FA',
+  backgroundColor: '#F1F3EE',
   android: {
     allowMixedContent: false,
   },
@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
     },
     LocalNotifications: {
       smallIcon: 'ic_stat_dispensa',
-      iconColor: '#4E8752',
+      iconColor: '#3F8A1F',
     },
   },
 };

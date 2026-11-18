@@ -1,7 +1,7 @@
 {
   "name": "dispensa",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,7 +21,7 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/share": "^8.0.3",
-    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/outfit": "^5.3.0",
     "dexie": "^4.4.7"
   },
   "devDependencies": {

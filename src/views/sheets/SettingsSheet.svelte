@@ -6,7 +6,7 @@
   import { RELEASES_PAGE } from '../../lib/logic/updates';
   import { APP_VERSION, isNative, openExternal } from '../../lib/platform';
   import { setAiKey } from '../../lib/repo';
-  import { modelsFor, type ModelInfo } from '../../lib/services/gemini';
+  import { modelsInUse } from '../../lib/services/gemini';
   import { askNotificationPermission, notificationsAllowed } from '../../lib/services/notifications';
   import { readBackupFile, restoreBackup, shareBackup } from '../../lib/services/share';
   import { app, initApp, scheduleNotifications, sheets, updateSettings } from '../../lib/state/app.svelte';
@@ -18,7 +18,8 @@
   import Sheet from '../../lib/ui/Sheet.svelte';
   import { pickFile } from '../../lib/ui/pickFile';
 
-  let models = $state<ModelInfo | null>(null);
+  /** Modelli di Gemini in uso, quelli non gratuiti e se arrivano dall'elenco di Google (così i nuovi arrivano da soli). */
+  let models = $state<{ models: string[]; paid: string[]; fromList: boolean } | null>(null);
   let changingKey = $state(false);
   let notifBlocked = $state(false);
   let checking = $state(false);
@@ -33,7 +34,7 @@
 
   async function refreshModels() {
     if (!app.aiKey) return;
-    models = await modelsFor(app.aiKey).catch(() => null);
+    models = await modelsInUse(app.aiKey).catch(() => null);
   }
 
   async function refreshNotif() {
@@ -162,10 +163,18 @@
   <div class="card">
     {#if app.aiKey && !changingKey}
       <p class="ok"><Icon name="sparkles" size={20} /> Gemini è collegato</p>
-      <p class="note">
-        Legge le etichette e propone le ricette.
-        {#if models}Modelli in uso: {models.models.slice(0, 3).map(modelLabel).join(', ')}{models.fromList ? ' (aggiornati da Google ogni giorno)' : ''}.{/if}
-      </p>
+      <p class="note">Legge le etichette e propone le ricette.</p>
+      {#if models}
+        <p class="note">
+          Modelli in uso: <strong>{models.models.map(modelLabel).join(', ')}</strong>.
+          {models.fromList
+            ? 'Presi dall’elenco di Google, controllato ogni giorno: quando esce un modello nuovo l’app lo usa da sola.'
+            : 'Google non ha dato il suo elenco: l’app usa quelli scritti al suo interno e i nomi “sempre aggiornati” di Google.'}
+        </p>
+        {#if models.paid.length}
+          <p class="note">Non gratuiti con la tua chiave, quindi non usati: {models.paid.map(modelLabel).join(', ')}.</p>
+        {/if}
+      {/if}
       <div class="actions">
         <button class="btn btn-small" onclick={() => (changingKey = true)}>Cambia chiave</button>
         <button class="btn btn-small btn-ghost danger" onclick={disconnect}>Scollega</button>
@@ -272,7 +281,7 @@
     align-items: center;
     gap: 8px;
     font-weight: 650;
-    color: var(--primary-text);
+    color: var(--accent-text);
   }
   .actions {
     display: flex;

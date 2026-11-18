@@ -103,8 +103,8 @@
     margin: 0;
     padding: 12px 14px;
     border-radius: 14px;
-    background: var(--primary-soft);
-    color: var(--primary-text);
+    background: var(--accent-soft);
+    color: var(--accent-text);
     font-size: 0.9375rem;
     line-height: 1.45;
   }
@@ -138,7 +138,7 @@
     width: 24px;
     height: 24px;
     flex: none;
-    accent-color: var(--primary);
+    accent-color: var(--accent);
   }
   .emoji {
     font-size: 1.6rem;

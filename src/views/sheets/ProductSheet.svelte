@@ -7,6 +7,7 @@
   import { guessFood, isKnownFood, UNITS } from '../../lib/logic/foods';
   import { LOCATIONS } from '../../lib/logic/pantry';
   import type { ProductDraft } from '../../lib/logic/drafts';
+  import { capitalize } from '../../lib/logic/text';
   import { tapFeedback } from '../../lib/platform';
   import { deleteItem, deleteShopping } from '../../lib/repo';
   import { scanPhoto } from '../../lib/services/ai';
@@ -164,7 +165,7 @@
     if (!canSave) return;
     saving = true;
     const draft = JSON.parse(JSON.stringify(d)) as ProductDraft;
-    draft.name = draft.name.trim();
+    draft.name = capitalize(draft.name.trim());
     try {
       if (mode === 'edit' && itemId) {
         await saveEdit(itemId, draft);
@@ -357,8 +358,8 @@
     margin: 0;
     padding: 12px 14px;
     border-radius: 14px;
-    background: var(--primary-soft);
-    color: var(--primary-text);
+    background: var(--accent-soft);
+    color: var(--accent-text);
     font-size: 0.9375rem;
     line-height: 1.45;
   }
@@ -413,7 +414,7 @@
   }
   .emojis button.sel {
     background: var(--surface);
-    box-shadow: 0 0 0 2px var(--primary);
+    box-shadow: 0 0 0 2px var(--accent);
   }
   .date-row {
     display: flex;
@@ -438,7 +439,7 @@
   .expinfo {
     margin: 0;
     font-size: 0.9375rem;
-    color: var(--primary-text);
+    color: var(--accent-text);
     font-weight: 600;
   }
   .expinfo.est {

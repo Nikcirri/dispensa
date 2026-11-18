@@ -39,7 +39,7 @@
 
 <article class="item {urgency}" class:done class:tmc={item.expiryKind === 'tmc'}>
   <button class="main" onclick={edit} aria-label="Modifica {item.name}">
-    <ItemThumb emoji={item.emoji} thumb={item.thumb} imageUrl={item.imageUrl} size={56} />
+    <ItemThumb emoji={item.emoji} thumb={item.thumb} imageUrl={item.imageUrl} size={56} tone={urgency} />
     <span class="text">
       <span class="name">{item.name}</span>
       {#if meta.length}<span class="meta">{meta.join(' · ')}</span>{/if}
@@ -55,8 +55,8 @@
       onempty={() => void finish()}
     />
     <span class="grow"></span>
-    <button class="act" aria-label="Metti {item.name} in cima alla spesa" onclick={() => void addToShopping(item.name)}>
-      <Icon name="cartPlus" size={22} />
+    <button class="circle-btn small" aria-label="Metti {item.name} in cima alla spesa" onclick={() => void addToShopping(item.name)}>
+      <Icon name="cartPlus" size={21} />
     </button>
     <button class="act done-btn" aria-label="{item.name} finito" onclick={finish}>
       <span class="check"><Icon name="check" size={20} stroke={2.6} /></span>
@@ -71,30 +71,17 @@
     background: var(--surface);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 12px 12px 10px 14px;
+    padding: 14px 14px 12px;
     overflow: hidden;
     transition: transform 240ms ease, opacity 240ms ease;
   }
-  /* Striscia colorata a sinistra: si vede l'urgenza anche senza leggere. */
-  .item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 5px;
-    background: transparent;
+  /* Bordo colorato solo per chi scade oggi o domani (o è già oltre): si nota anche senza leggere. */
+  .item.rosso,
+  .item.scaduto {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent), var(--shadow);
   }
-  .item.rosso::before,
-  .item.scaduto::before {
-    background: var(--red);
-  }
-  .item.arancione::before,
-  .item.scaduto.tmc::before {
-    background: var(--amber);
-  }
-  .item.verde::before {
-    background: var(--primary);
+  .item.scaduto.tmc {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--amber) 60%, transparent), var(--shadow);
   }
   .item.done {
     transform: translateX(40px) scale(0.97);
@@ -117,7 +104,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding-top: 2px;
+    padding-top: 3px;
   }
   .name {
     font-size: 1.0625rem;
@@ -138,33 +125,30 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 10px;
+    margin-top: 12px;
     flex-wrap: wrap;
   }
   .grow {
     flex: 1;
   }
   .act {
-    min-width: 44px;
     height: 44px;
     border: 0;
     border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     cursor: pointer;
-    transition: transform 120ms ease, background 150ms ease;
+    transition: transform 120ms ease;
   }
   .act:active {
-    transform: scale(0.92);
+    transform: scale(0.94);
   }
   .done-btn {
-    padding: 0 14px 0 6px;
-    background: var(--primary-soft);
-    color: var(--primary-text);
+    padding: 0 14px 0 5px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
     font-weight: 650;
     font-size: 0.9375rem;
   }
@@ -172,8 +156,8 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--primary);
-    color: var(--on-primary);
+    background: var(--accent);
+    color: var(--accent-contrast);
     display: grid;
     place-items: center;
   }

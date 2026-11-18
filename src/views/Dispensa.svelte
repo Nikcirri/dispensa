@@ -7,46 +7,89 @@
 
 <script lang="ts">
   import { flip } from 'svelte/animate';
-  import { fade } from 'svelte/transition';
+  import { greeting } from '../lib/logic/dates';
   import { countByLocation, filterItems, groupByUrgency, LOCATIONS, sortItems, summarize } from '../lib/logic/pantry';
   import { plural } from '../lib/logic/text';
   import { app, sheets } from '../lib/state/app.svelte';
   import Icon, { type IconName } from '../lib/ui/Icon.svelte';
+  import Ring from '../lib/ui/Ring.svelte';
   import ProductCard from './ProductCard.svelte';
 
-  const LOCATION_ICONS: Record<LocationFilter, IconName> = { tutto: 'list', frigo: 'fridge', freezer: 'snowflake', dispensa: 'jar' };
+  const TILES: { id: LocationFilter; label: string; icon: IconName }[] = [
+    { id: 'tutto', label: 'Tutto', icon: 'list' },
+    ...LOCATIONS.map((l) => ({ id: l.id as LocationFilter, label: l.label, icon: (l.id === 'frigo' ? 'fridge' : l.id === 'freezer' ? 'snowflake' : 'jar') as IconName })),
+  ];
 
   const counts = $derived(countByLocation(app.items));
   const summary = $derived(summarize(app.items, app.today));
   const filtered = $derived(sortItems(filterItems(app.items, view.location, view.query), view.sort));
   const sections = $derived(view.sort === 'scadenza' ? groupByUrgency(filtered, app.today) : [{ id: 'tutti', title: '', items: filtered }]);
   const toBuy = $derived(app.shopping.filter((s) => !s.done).length);
-  const atRisk = $derived(summary.urgent + summary.expired);
-
-  const subtitle = $derived.by(() => {
-    if (!summary.total) return 'Vuota, per ora';
-    const parts = [plural(summary.total, 'prodotto', 'prodotti')];
-    if (summary.urgent) parts.push(`${summary.urgent} da usare subito`);
-    else if (summary.soon) parts.push(`${summary.soon} entro 5 giorni`);
-    return parts.join(' · ');
-  });
+  const urgentNow = $derived(summary.urgent + summary.expired);
+  const fresh = $derived(summary.total - summary.urgent - summary.expired - summary.soon);
+  const hour = $derived(new Date().getHours());
 </script>
 
-<header class="top">
-  <div class="titles">
-    <h1>Dispensa</h1>
-    <p>{subtitle}</p>
+<header class="page-top">
+  <div class="grow">
+    <p class="hello">{greeting(hour)}</p>
+    <h1>La tua dispensa</h1>
   </div>
-  <button class="icon-btn filled" aria-label="Lista della spesa" onclick={() => (sheets.shopping = true)}>
-    <Icon name="cart" />
+  <button class="circle-btn" aria-label="Lista della spesa" onclick={() => (sheets.shopping = true)}>
+    <Icon name="cart" size={22} />
     {#if toBuy}<span class="dot num">{toBuy > 99 ? '99+' : toBuy}</span>{/if}
   </button>
-  <button class="icon-btn filled" aria-label="Impostazioni" onclick={() => (sheets.settings = true)}>
-    <Icon name="gear" />
+  <button class="circle-btn" aria-label="Impostazioni" onclick={() => (sheets.settings = true)}>
+    <Icon name="gear" size={22} />
   </button>
 </header>
 
 {#if app.items.length}
+  <!-- Riassunto: l'anello è la parte di dispensa fresca; al centro quanto va usato per primo. -->
+  <section class="lime-card summary">
+    <div class="top-row">
+      <Ring value={summary.total ? fresh / summary.total : 0} size={128} stroke={12} color="var(--ring-on-lime)" track="var(--ring-track-on-lime)">
+        {#if urgentNow}
+          <span class="big num">{urgentNow}</span>
+          <span class="cap">da usare<br />subito</span>
+        {:else if summary.soon}
+          <span class="big num">{summary.soon}</span>
+          <span class="cap">entro<br />5 giorni</span>
+        {:else}
+          <span class="big ok"><Icon name="check" size={40} stroke={3} /></span>
+          <span class="cap">tutto<br />fresco</span>
+        {/if}
+      </Ring>
+      <div class="stats">
+        <div class="stat-line">
+          <span>In dispensa</span>
+          <strong class="num">{summary.total}</strong>
+        </div>
+        <div class="stat-line">
+          <span><i class="dot-c" style:background="var(--red)"></i>Oggi e domani</span>
+          <strong class="num">{summary.urgent}</strong>
+        </div>
+        <div class="stat-line">
+          <span><i class="dot-c" style:background="var(--amber)"></i>Entro 5 giorni</span>
+          <strong class="num">{summary.soon}</strong>
+        </div>
+        {#if summary.expired}
+          <div class="stat-line">
+            <span><i class="dot-c" style:background="var(--ink)"></i>Oltre la data</span>
+            <strong class="num">{summary.expired}</strong>
+          </div>
+        {/if}
+      </div>
+    </div>
+    {#if urgentNow || summary.soon}
+      <button class="go cook" onclick={() => (app.tab = 'ricette')}>
+        <span class="go-icon"><Icon name="chef" size={22} /></span>
+        <span class="go-text">Cosa cucino?</span>
+        <span class="go-end"><Icon name="chevronRight" size={20} /></span>
+      </button>
+    {/if}
+  </section>
+
   <label class="search">
     <Icon name="search" size={20} />
     <input type="search" placeholder="Cerca in dispensa…" bind:value={view.query} autocomplete="off" />
@@ -55,33 +98,15 @@
     {/if}
   </label>
 
-  <div class="chips scroll filters" role="group" aria-label="Dove">
-    <button class="chip" aria-pressed={view.location === 'tutto'} onclick={() => (view.location = 'tutto')}>
-      <Icon name={LOCATION_ICONS.tutto} size={18} /> Tutto <span class="count">{counts.tutto}</span>
-    </button>
-    {#each LOCATIONS as l (l.id)}
-      <button class="chip" aria-pressed={view.location === l.id} onclick={() => (view.location = view.location === l.id ? 'tutto' : l.id)}>
-        <Icon name={LOCATION_ICONS[l.id]} size={18} /> {l.label} <span class="count">{counts[l.id]}</span>
+  <div class="tiles" role="group" aria-label="Dove">
+    {#each TILES as t (t.id)}
+      <button class="tile" aria-pressed={view.location === t.id} onclick={() => (view.location = view.location === t.id && t.id !== 'tutto' ? 'tutto' : t.id)}>
+        <Icon name={t.icon} size={22} />
+        <strong class="num">{counts[t.id]}</strong>
+        <span>{t.label}</span>
       </button>
     {/each}
   </div>
-
-  {#if atRisk && !view.query}
-    <button class="alert" onclick={() => (app.tab = 'ricette')} transition:fade={{ duration: 150 }}>
-      <span class="alert-icon" aria-hidden="true">⏰</span>
-      <span class="alert-text">
-        <strong>
-          {#if summary.urgent}
-            {summary.urgent === 1 ? '1 prodotto scade' : `${summary.urgent} prodotti scadono`} oggi o domani
-          {:else}
-            {summary.expired === 1 ? '1 prodotto è oltre la data' : `${summary.expired} prodotti sono oltre la data`}
-          {/if}
-        </strong>
-        <span>Tocca per una ricetta che {summary.urgent + summary.expired === 1 ? 'lo usa' : 'li usa'}</span>
-      </span>
-      <Icon name="chevronRight" />
-    </button>
-  {/if}
 
   <div class="sortbar">
     <span class="found">{view.query || view.location !== 'tutto' ? plural(filtered.length, 'risultato', 'risultati') : ''}</span>
@@ -116,18 +141,25 @@
     </div>
   {/if}
 
-  <button class="stats-link" onclick={() => (sheets.stats = true)}>
-    <span aria-hidden="true">🌱</span>
-    <span class="grow">Il tuo anti-spreco</span>
+  <button class="card stats-link" onclick={() => (sheets.stats = true)}>
+    <span class="icon-tile"><Icon name="leaf" /></span>
+    <span class="grow">
+      <strong>Il tuo anti-spreco</strong>
+      <span>Quanto consumi e quanto butti, mese per mese</span>
+    </span>
     <Icon name="chevronRight" size={20} />
   </button>
 {:else}
-  <div class="welcome card">
-    <div class="big" aria-hidden="true">🫙</div>
+  <section class="lime-card welcome">
+    <div class="big-emoji" aria-hidden="true">🫙</div>
     <h2>La dispensa è vuota</h2>
     <p>Fotografa un prodotto o la sua etichetta: leggo nome e scadenza e lo metto in dispensa per te.</p>
-    <button class="btn btn-primary btn-big btn-block" onclick={() => (app.tab = 'aggiungi')}>
-      <Icon name="camera" /> Aggiungi il primo prodotto
+  </section>
+  <div class="welcome-actions">
+    <button class="go" onclick={() => (app.tab = 'aggiungi')}>
+      <span class="go-icon"><Icon name="camera" size={22} /></span>
+      <span class="go-text">Aggiungi il primo prodotto</span>
+      <span class="go-end"><Icon name="chevronRight" size={20} /></span>
     </button>
     <button class="btn btn-ghost btn-block" onclick={() => (sheets.shopping = true)}>
       <Icon name="cart" /> Apri la lista della spesa
@@ -136,26 +168,51 @@
 {/if}
 
 <style>
-  .top {
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 16px;
+  }
+  .top-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 6px 0 14px;
+    gap: 14px;
   }
-  .titles {
+  .big {
+    font-size: 2.125rem;
+    font-weight: 700;
+    line-height: 1.05;
+  }
+  .big.ok {
+    color: var(--ring-on-lime);
+    display: grid;
+  }
+  .cap {
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    opacity: 0.75;
+  }
+  .stats {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
-  h1 {
-    margin: 0;
-    font-size: 2rem;
+  .stat-line span {
+    white-space: nowrap;
   }
-  .titles p {
-    margin: 2px 0 0;
-    color: var(--text-muted);
-    font-size: 0.9375rem;
+  .cook {
+    min-height: 54px;
+    font-size: 1rem;
+  }
+  .cook .go-icon,
+  .cook .go-end {
+    width: 42px;
+    height: 42px;
   }
   .search {
+    margin-top: 14px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -167,7 +224,7 @@
     color: var(--text-muted);
   }
   .search:focus-within {
-    border-color: var(--primary);
+    border-color: var(--accent);
   }
   .search input {
     flex: 1;
@@ -191,42 +248,54 @@
     cursor: pointer;
     color: var(--text-muted);
   }
-  .filters {
+  .tiles {
     margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
-  .alert {
-    width: 100%;
-    margin-top: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 14px 14px 16px;
-    border: 0;
-    border-radius: var(--radius);
-    background: linear-gradient(120deg, var(--red-soft), var(--amber-soft));
-    color: var(--red-text);
-    text-align: left;
-    cursor: pointer;
-  }
-  .alert-icon {
-    font-size: 1.75rem;
-    line-height: 1;
-  }
-  .alert-text {
-    flex: 1;
+  .tile {
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 2px;
-  }
-  .alert-text span {
-    font-size: 0.875rem;
+    padding: 10px 2px 9px;
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
     color: var(--text-muted);
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease, transform 120ms ease;
+  }
+  .tile:active {
+    transform: scale(0.96);
+  }
+  .tile strong {
+    font-size: 1.25rem;
+    line-height: 1.1;
+    color: var(--text);
+  }
+  .tile span {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+  .tile[aria-pressed='true'] {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .tile[aria-pressed='true'] strong {
+    color: var(--accent-contrast);
   }
   .sortbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 12px 2px 0;
+    margin: 10px 2px 0;
     min-height: 40px;
   }
   .found {
@@ -246,7 +315,7 @@
     border: 0;
     background: transparent;
     font-size: 0.9375rem;
-    font-weight: 650;
+    font-weight: 600;
     color: var(--text);
     padding: 8px 18px 8px 2px;
     margin-right: -18px;
@@ -259,6 +328,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-top: 14px;
   }
   .section-title span {
     font-weight: 600;
@@ -282,40 +352,48 @@
   .stats-link {
     width: 100%;
     margin-top: 22px;
-    min-height: 56px;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 16px;
-    border: 1px dashed var(--border);
-    border-radius: 18px;
-    background: transparent;
-    color: var(--text-muted);
-    font-weight: 600;
+    padding: 14px;
+    border: 0;
+    color: var(--text);
     cursor: pointer;
     text-align: left;
   }
   .stats-link .grow {
     flex: 1;
-  }
-  .welcome {
-    margin-top: 20px;
-    text-align: center;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 28px 20px;
+    gap: 2px;
+  }
+  .stats-link .grow span {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+  }
+  .welcome {
+    margin-top: 6px;
+    text-align: center;
+    padding: 28px 22px;
   }
   .welcome h2 {
-    margin: 0;
+    margin: 8px 0 6px;
+    font-size: 1.375rem;
   }
   .welcome p {
-    margin: 0 0 8px;
-    color: var(--text-muted);
+    margin: 0;
     line-height: 1.5;
+    opacity: 0.8;
   }
-  .big {
-    font-size: 4rem;
+  .big-emoji {
+    font-size: 3.75rem;
     line-height: 1;
+  }
+  .welcome-actions {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 </style>

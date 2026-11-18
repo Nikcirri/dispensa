@@ -214,15 +214,15 @@
     display: grid;
     place-items: center;
     cursor: pointer;
-    color: var(--on-primary);
+    color: var(--accent-contrast);
     transition: background 150ms ease, transform 120ms ease;
   }
   .tick:active {
     transform: scale(0.85);
   }
   .tick.on {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--accent);
+    border-color: var(--accent);
   }
   .emoji {
     font-size: 1.4rem;

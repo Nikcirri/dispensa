@@ -1,39 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import {
+  chooseModels,
   describeAttempts,
   extractJson,
+  finishNote,
   geminiProblem,
   geminiText,
+  GRACE_END_MS,
   GRACE_MS,
+  isLiteId,
+  isPaidOnly,
   isTimeoutError,
   LATEST_ALIASES,
   looksBlank,
   looksLikeGeminiKey,
   modelLabel,
-  modelsToTry,
   msToPacificMidnight,
   OVERALL_MS,
+  PAID_RECHECK_MS,
   pauseUntil,
-  pickModels,
   raceStep,
+  rankModels,
   STAGGER_MS,
   thinkingLevelFor,
   wasSlow,
 } from './gemini';
 
+// Stessi controlli dell'app Nutrizione (la logica di Gemini è la stessa).
+
 describe('Gemini: risposta', () => {
-  it('legge il JSON anche dentro ``` e il testo senza il ragionamento', () => {
+  it('legge il JSON anche dentro ```', () => {
     expect(extractJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJson('niente')).toBeNull();
-    const json = { candidates: [{ content: { parts: [{ text: 'pensiero', thought: true }, { text: '{"ok":1}' }] } }] };
-    expect(geminiText(json)).toBe('{"ok":1}');
   });
 
-  it('riconosce le foto nere o vuote', () => {
-    const black = new Uint8ClampedArray(24 * 24 * 4);
-    expect(looksBlank(black)).toBe(true);
-    const noisy = new Uint8ClampedArray(24 * 24 * 4).map((_, i) => (i * 37) % 255);
-    expect(looksBlank(noisy)).toBe(false);
+  it('testo della risposta senza il ragionamento', () => {
+    const json = { candidates: [{ content: { parts: [{ text: 'pensiero', thought: true }, { text: '{"a":' }, { text: '1}' }] } }] };
+    expect(geminiText(json)).toBe('{"a":1}');
+    expect(geminiText({})).toBe('');
   });
 
   it('riconosce gli errori di Gemini', () => {
@@ -51,17 +55,31 @@ describe('Gemini: risposta', () => {
     expect(looksLikeGeminiKey('projects/355147696887')).toBe(false);
   });
 });
-
-describe('AI: velocità', () => {
-  it('usa sempre il modello migliore disponibile, saltando quelli in pausa', () => {
-    const models = ['a', 'b', 'c'];
+describe('Gemini: modelli e pause', () => {
+  it('usa sempre i modelli migliori disponibili: due normali e un leggero, saltando quelli in pausa', () => {
+    const models = ['a', 'b', 'c', 'l1', 'l2'];
+    const lite = ['l1', 'l2'];
     const now = 1_000_000;
-    expect(modelsToTry(models, {}, now)).toEqual(['a', 'b', 'c']);
-    expect(modelsToTry(models, { a: now + 5000 }, now)).toEqual(['b', 'c']);
+    expect(chooseModels(models, lite, {}, now)).toEqual(['a', 'b', 'l1']);
+    // Il migliore ha finito il limite: entra il terzo di riserva.
+    expect(chooseModels(models, lite, { a: now + 5000 }, now)).toEqual(['b', 'c', 'l1']);
+    expect(chooseModels(models, lite, { l1: now + 5000 }, now)).toEqual(['a', 'b', 'l2']);
     // La pausa finita non conta più: il migliore torna primo.
-    expect(modelsToTry(models, { a: now - 1 }, now)).toEqual(['a', 'b', 'c']);
-    // Tutti in pausa: si provano comunque.
-    expect(modelsToTry(models, { a: now + 1, b: now + 1, c: now + 1 }, now)).toEqual(['a', 'b', 'c']);
+    expect(chooseModels(models, lite, { a: now - 1 }, now)).toEqual(['a', 'b', 'l1']);
+    // Tutti in pausa: si provano comunque i primi.
+    const all = Object.fromEntries(models.map((m) => [m, now + 1]));
+    expect(chooseModels(models, lite, all, now)).toEqual(['a', 'b', 'l1']);
+  });
+
+  it('riconosce un modello non compreso nel livello gratuito (limite 0)', () => {
+    const now = 1_000_000;
+    const paid = { error: { code: 429, message: 'Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-4-argon', status: 'RESOURCE_EXHAUSTED' } };
+    const day = { error: { code: 429, message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, model: gemini-4-hydrogen', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } };
+    expect(isPaidOnly(paid)).toBe(true);
+    expect(isPaidOnly({ error: { details: [{ violations: [{ quotaValue: '0' }] }] } })).toBe(true);
+    expect(isPaidOnly(day)).toBe(false);
+    expect(isPaidOnly(null)).toBe(false);
+    expect(pauseUntil(429, paid, now)).toBe(now + PAID_RECHECK_MS);
   });
   it('pausa giusta dopo un errore', () => {
     const now = Date.UTC(2026, 10, 10, 20, 0, 0); // 12:00 a Los Angeles
@@ -77,13 +95,31 @@ describe('AI: velocità', () => {
     expect(msToPacificMidnight(Date.UTC(2026, 10, 10, 7, 59, 0))).toBe(2 * 60_000); // 23:59 a LA: 1 minuto + 1 di margine
     expect(msToPacificMidnight(Date.UTC(2026, 6, 10, 7, 0, 0))).toBe(24 * 3600_000 + 60_000); // 00:00 in estate (UTC-7)
   });
-  it('nomi dei modelli', () => {
+  it('nomi dei modelli e riepilogo dei tentativi', () => {
     expect(modelLabel('gemini-3.5-flash-lite')).toBe('3.5 Flash-Lite');
     expect(modelLabel('gemini-3.8-flash')).toBe('3.8 Flash');
+    expect(
+      describeAttempts([
+        { model: 'gemini-3.8-flash', outcome: 'quota' },
+        { model: 'gemini-3.5-flash-lite', outcome: 'empty' },
+      ]),
+    ).toBe('3.8 Flash: limite gratuito raggiunto · 3.5 Flash-Lite: niente riconosciuto');
+  });
+  it('riconosce le foto nere o vuote', () => {
+    const fill = (f: (i: number) => [number, number, number]) => {
+      const a = new Uint8ClampedArray(24 * 24 * 4);
+      for (let i = 0; i < 24 * 24; i++) a.set([...f(i), 255], i * 4);
+      return a;
+    };
+    expect(looksBlank(fill(() => [0, 0, 0]))).toBe(true);
+    expect(looksBlank(fill(() => [200, 200, 200]))).toBe(true);
+    expect(looksBlank(fill((i) => (i % 2 ? [3, 3, 3] : [6, 5, 4])))).toBe(true);
+    // Foto vera, anche se scura: c'è variazione.
+    expect(looksBlank(fill((i) => [(i * 7) % 60, (i * 3) % 40, (i * 5) % 30]))).toBe(false);
+    expect(looksBlank(fill((i) => (i % 3 ? [180, 120, 60] : [40, 90, 30])))).toBe(false);
   });
 });
-
-describe('AI: nessuna risposta in tempo', () => {
+describe('Gemini: nessuna risposta in tempo', () => {
   it('riconosce quando Gemini non ha risposto in tempo', () => {
     expect(isTimeoutError(new Error('timeout'))).toBe(true);
     expect(isTimeoutError(new Error('Read timed out'))).toBe(true);
@@ -101,8 +137,7 @@ describe('AI: nessuna risposta in tempo', () => {
   });
 });
 
-
-describe('AI: più modelli a scaglioni', () => {
+describe('Gemini: più modelli a scaglioni', () => {
   const base = { total: 3, lastIsSlow: false, sinceLastStart: 0, sinceFirstOk: null, elapsed: 0 };
   it('si parte dal migliore e, se tarda, si avvia il successivo', () => {
     expect(raceStep({ ...base, results: [] })).toEqual({ type: 'start' });
@@ -118,6 +153,10 @@ describe('AI: più modelli a scaglioni', () => {
     expect(raceStep({ ...base, results: ['ok', null] })).toEqual({ type: 'use', index: 0 });
     expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: 1000, elapsed: 20000 })).toEqual({ type: 'wait' });
     expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: GRACE_MS, elapsed: 25000 })).toEqual({ type: 'use', index: 2 });
+    // Il migliore è zitto da 35 s: è bloccato, si usa subito la risposta arrivata (non si aspetta fino a 43 s).
+    expect(raceStep({ ...base, results: [null, 'fail', 'ok'], sinceFirstOk: 0, elapsed: 33000 })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null, 'fail', 'ok'], sinceFirstOk: 2000, elapsed: GRACE_END_MS })).toEqual({ type: 'use', index: 2 });
+    expect(raceStep({ ...base, results: [null, 'ok'], sinceFirstOk: 0, elapsed: 40000 })).toEqual({ type: 'use', index: 1 });
     expect(raceStep({ ...base, results: ['fail', 'ok', null], sinceFirstOk: 0 })).toEqual({ type: 'use', index: 1 });
   });
 
@@ -129,20 +168,36 @@ describe('AI: più modelli a scaglioni', () => {
   });
 });
 
-describe('Gemini: tempo massimo diverso per le ricette', () => {
-  it('con più tempo a disposizione si continua ad aspettare', () => {
-    const base = { total: 2, lastIsSlow: false, sinceLastStart: 0, sinceFirstOk: null };
-    expect(raceStep({ ...base, results: [null, null], elapsed: OVERALL_MS })).toEqual({ type: 'finish' });
-    expect(raceStep({ ...base, results: [null, null], elapsed: OVERALL_MS, overallMs: OVERALL_MS + 30_000 })).toEqual({ type: 'wait' });
-  });
-});
-
-describe('AI: quanto ragionamento chiedere', () => {
+describe('Gemini: quanto ragionamento chiedere', () => {
   it('minimo dove è accettato (più veloce), basso sui Flash più nuovi', () => {
     expect(thinkingLevelFor('gemini-3.5-flash-lite')).toBe('minimal');
     expect(thinkingLevelFor('gemini-3.6-flash')).toBe('minimal');
     expect(thinkingLevelFor('gemini-3.8-flash')).toBe('low');
     expect(thinkingLevelFor('gemini-4-flash')).toBe('low');
+    // Gemini 4 Hydrogen rifiuta "minimal" con un errore; anche i modelli futuri partono da "low".
+    expect(thinkingLevelFor('gemini-4-hydrogen')).toBe('low');
+    expect(thinkingLevelFor('gemini-4-neon-lite')).toBe('low');
+    expect(thinkingLevelFor('gemini-flash-lite-latest')).toBe('low');
+  });
+
+  it('nella riga dei tentativi il dettaglio breve di ogni modello', () => {
+    expect(
+      describeAttempts([
+        { model: 'gemini-4-hydrogen', outcome: 'slower', seconds: 43, note: 'senza schema' },
+        { model: 'gemini-3.8-flash', outcome: 'ok', seconds: 33 },
+        { model: 'gemini-3.5-flash-lite', outcome: 'unreadable', seconds: 30, note: 'troncata' },
+        { model: 'gemini-4-argon', outcome: 'error', note: '400' },
+      ]),
+    ).toBe('4 Hydrogen: più lento di un altro (senza schema, 43 s) · 3.8 Flash: ok (33 s) · 3.5 Flash-Lite: risposta non leggibile (troncata, 30 s) · 4 Argon: errore (400)');
+  });
+
+  it('dice perché una risposta non ha il piatto', () => {
+    expect(finishNote({ candidates: [{ finishReason: 'STOP' }] })).toBeUndefined();
+    expect(finishNote({ candidates: [{ finishReason: 'MAX_TOKENS' }] })).toBe('troncata');
+    expect(finishNote({ candidates: [{ finishReason: 'SAFETY' }] })).toBe('bloccata');
+    expect(finishNote({ candidates: [{ finishReason: 'MALFORMED_FUNCTION_CALL' }] })).toBe('malformed_function_call');
+    expect(finishNote({ candidates: [] })).toBe('vuota');
+    expect(finishNote({ candidates: [{}] })).toBeUndefined();
   });
 
   it('i secondi nella riga dei tentativi', () => {
@@ -152,7 +207,7 @@ describe('AI: quanto ragionamento chiedere', () => {
   });
 });
 
-describe('AI: modelli lenti con le foto', () => {
+describe('Gemini: modelli lenti con le foto', () => {
   it('lento solo chi è rimasto senza risposta a lungo, non chi è stato superato', () => {
     expect(wasSlow('timeout', 3000)).toBe(true);
     expect(wasSlow(null, 25_000)).toBe(true);
@@ -163,10 +218,15 @@ describe('AI: modelli lenti con le foto', () => {
   });
 });
 
-describe('AI: modelli nuovi senza aggiornare l’app', () => {
-  const FALLBACK = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
-  const gen = (name: string) => ({ name: `models/${name}`, supportedGenerationMethods: ['generateContent', 'countTokens'] });
-  it('prende i due Flash più nuovi e il Flash-Lite più nuovo', () => {
+describe('Gemini: modelli nuovi senza aggiornare l’app', () => {
+  const gen = (name: string, displayName?: string) => ({
+    name: `models/${name}`,
+    supportedGenerationMethods: ['generateContent', 'countTokens'],
+    ...(displayName ? { displayName } : {}),
+  });
+  const ids = (list: { id: string; lite: boolean }[]) => list.map((m) => `${m.id}${m.lite ? ' (lite)' : ''}`);
+
+  it('dal più nuovo, senza i modelli che non servono per un piatto', () => {
     const listed = [
       gen('gemini-3.5-flash'),
       gen('gemini-3.8-flash'),
@@ -174,27 +234,57 @@ describe('AI: modelli nuovi senza aggiornare l’app', () => {
       gen('gemini-3.5-flash-lite'),
       gen('gemini-3.7-flash-lite'),
       gen('gemini-3.8-flash-image'),
+      gen('gemini-3.8-flash-lite-tts'),
       gen('gemini-3.8-pro'),
+      gen('gemini-2.5-flash-preview-05-20'),
+      gen('gemini-2.0-flash-001'),
       gen('gemini-flash-latest'),
+      gen('gemini-omni-1.2-flash'),
+      gen('gemini-decision-1'),
       { name: 'models/gemini-4-flash-live', supportedGenerationMethods: ['bidiGenerateContent'] },
       { name: 'models/text-embedding-005', supportedGenerationMethods: ['embedContent'] },
     ];
-    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.7-flash-lite']);
+    expect(ids(rankModels(listed))).toEqual([
+      'gemini-3.8-flash',
+      'gemini-3.7-flash-lite (lite)',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite (lite)',
+    ]);
   });
 
-  it('quando esce un modello nuovo lo usa da sola; a pari versione solo quello stabile', () => {
-    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-flash-preview'), gen('gemini-4-flash'), gen('gemini-3.5-flash-lite')];
-    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-4-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+  it('prende anche i modelli con nomi nuovi, come Gemini 4 Hydrogen', () => {
+    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-hydrogen'), gen('gemini-4-argon'), gen('gemini-3.5-flash-lite'), gen('gemini-4-neon', 'Gemini 4 Neon Lite')];
+    expect(ids(rankModels(listed))).toEqual([
+      'gemini-4-hydrogen',
+      'gemini-4-argon',
+      'gemini-4-neon (lite)',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash-lite (lite)',
+    ]);
   });
 
-  it('se di una versione esiste solo la preview, usa la preview', () => {
-    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-flash-preview'), gen('gemini-4-flash-lite-preview')];
-    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-4-flash-preview', 'gemini-3.8-flash', 'gemini-4-flash-lite-preview']);
+  it('a pari versione prima lo stabile; la preview solo se lo stabile non c’è', () => {
+    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-flash-preview'), gen('gemini-4-flash'), gen('gemini-4-flash-lite-preview')];
+    expect(ids(rankModels(listed))).toEqual(['gemini-4-flash', 'gemini-4-flash-lite-preview (lite)', 'gemini-3.8-flash']);
   });
 
-  it('senza elenco (o con nomi che non riconosce) usa quelli scritti nell’app', () => {
-    expect(pickModels(null, FALLBACK)).toEqual(FALLBACK);
-    expect(pickModels([gen('gemini-nuovo-nome')], FALLBACK)).toEqual(FALLBACK);
+  it('senza nomi riconoscibili non sceglie niente (l’app usa i suoi)', () => {
+    expect(rankModels([gen('modello-nuovo')])).toEqual([]);
     expect(LATEST_ALIASES).toContain('gemini-flash-latest');
+    expect(isLiteId('gemini-flash-lite-latest')).toBe(true);
+    expect(isLiteId('gemini-flash-latest')).toBe(false);
+    expect(isLiteId('gemini-3.5-flash-lite')).toBe(true);
+  });
+});
+
+
+describe('Gemini: tempi propri per le ricette', () => {
+  const base = { total: 3, lastIsSlow: false, sinceLastStart: 0, sinceFirstOk: null, elapsed: 0 };
+  it('con più tempo a disposizione si continua ad aspettare, e il secondo modello parte più tardi', () => {
+    expect(raceStep({ ...base, results: [null, null, null], elapsed: OVERALL_MS })).toEqual({ type: 'finish' });
+    expect(raceStep({ ...base, results: [null], sinceLastStart: OVERALL_MS - 1000, elapsed: OVERALL_MS, overallMs: OVERALL_MS + 30_000, staggerMs: OVERALL_MS })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null], sinceLastStart: STAGGER_MS, elapsed: STAGGER_MS, staggerMs: 35_000 })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null], sinceLastStart: 35_000, elapsed: 35_000, staggerMs: 35_000 })).toEqual({ type: 'start' });
   });
 });

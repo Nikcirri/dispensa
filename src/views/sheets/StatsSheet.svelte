@@ -6,6 +6,7 @@
   import { mostWasted, recentMonths } from '../../lib/logic/pantry';
   import { allHistory } from '../../lib/repo';
   import { app, sheets } from '../../lib/state/app.svelte';
+  import Ring from '../../lib/ui/Ring.svelte';
   import Sheet from '../../lib/ui/Sheet.svelte';
   import type { HistoryEntry } from '../../lib/types';
 
@@ -41,15 +42,26 @@
     <p class="empty">Carico…</p>
   {:else}
     {#if thisMonth}
-      <div class="hero card">
+      <section class="lime-card hero">
         <p class="month">{thisMonth.label}</p>
-        <div class="nums">
-          <div><strong class="num">{thisMonth.consumed}</strong><span>consumati</span></div>
-          <div><strong class="num bad">{thisMonth.wasted}</strong><span>buttati</span></div>
-          <div><strong class="num good">{thisMonth.savedPct === null ? '–' : `${thisMonth.savedPct}%`}</strong><span>salvati</span></div>
+        <div class="row-hero">
+          <Ring value={(thisMonth.savedPct ?? 0) / 100} size={120} stroke={11} color="var(--ring-on-lime)" track="var(--ring-track-on-lime)">
+            <span class="pct num">{thisMonth.savedPct === null ? '–' : `${thisMonth.savedPct}%`}</span>
+            <span class="cap">salvati</span>
+          </Ring>
+          <div class="lines">
+            <div class="stat-line">
+              <span><i class="dot-c" style:background="var(--ring-on-lime)"></i>Consumati</span>
+              <strong class="num">{thisMonth.consumed}</strong>
+            </div>
+            <div class="stat-line">
+              <span><i class="dot-c" style:background="var(--red)"></i>Buttati</span>
+              <strong class="num">{thisMonth.wasted}</strong>
+            </div>
+          </div>
         </div>
         <p class="cheer">{cheer(thisMonth.savedPct)}</p>
-      </div>
+      </section>
     {/if}
 
     <h3 class="section-title">Ultimi 6 mesi</h3>
@@ -94,39 +106,29 @@
 </Sheet>
 
 <style>
-  .hero {
-    text-align: center;
-    background: linear-gradient(145deg, var(--primary-soft), var(--surface));
-  }
   .month {
     margin: 0 0 10px;
-    font-weight: 650;
-    color: var(--text-muted);
+    font-weight: 600;
+    opacity: 0.75;
     text-transform: capitalize;
   }
-  .nums {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-  .nums div {
+  .row-hero {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 16px;
   }
-  .nums strong {
-    font-size: 2rem;
-    line-height: 1.1;
+  .pct {
+    font-size: 1.625rem;
+    font-weight: 700;
+    line-height: 1;
   }
-  .nums span {
-    font-size: 0.875rem;
-    color: var(--text-muted);
+  .cap {
+    font-size: 0.75rem;
+    opacity: 0.75;
   }
-  .bad {
-    color: var(--red-text);
-  }
-  .good {
-    color: var(--primary-text);
+  .lines {
+    flex: 1;
+    min-width: 0;
   }
   .cheer {
     margin: 12px 0 0;
@@ -159,10 +161,10 @@
     background: var(--surface-2);
   }
   .c {
-    background: var(--primary);
+    background: var(--accent);
   }
   .w {
-    background: var(--coral);
+    background: var(--red);
   }
   .lbl {
     font-size: 0.75rem;

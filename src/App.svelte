@@ -124,12 +124,12 @@
       {#each TABS as t (t.id)}
         {#if t.id === 'aggiungi'}
           <button class="tab center" class:active={app.tab === t.id} aria-current={app.tab === t.id ? 'page' : undefined} onclick={() => selectTab(t.id)}>
-            <span class="fab"><Icon name={t.icon} size={28} /></span>
+            <span class="fab"><Icon name={t.icon} size={26} stroke={2.2} /></span>
             <span class="label">{t.label}</span>
           </button>
         {:else}
           <button class="tab" class:active={app.tab === t.id} aria-current={app.tab === t.id ? 'page' : undefined} onclick={() => selectTab(t.id)}>
-            <span class="pill"><Icon name={t.icon} /></span>
+            <Icon name={t.icon} size={26} />
             <span class="label">{t.label}</span>
           </button>
         {/if}
@@ -187,7 +187,7 @@
     flex-direction: column;
     gap: 10px;
     margin-bottom: 12px;
-    border: 1px solid var(--primary);
+    border: 1px solid var(--accent);
   }
   .update span {
     display: block;
@@ -216,18 +216,18 @@
   }
   .progress div {
     height: 100%;
-    background: var(--primary);
+    background: var(--accent);
     transition: width 200ms ease;
   }
   .navbar {
     flex: none;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     background: var(--surface);
     border-top: 1px solid var(--border);
-    padding: 0 8px var(--safe-bottom);
+    padding: 0 6px var(--safe-bottom);
     z-index: 20;
-    box-shadow: 0 -4px 20px rgb(20 30 22 / 0.05);
+    box-shadow: 0 -4px 20px rgb(20 30 20 / 0.04);
   }
   .tab {
     flex: 1;
@@ -242,45 +242,35 @@
     color: var(--text-muted);
     cursor: pointer;
   }
-  .pill {
-    width: 60px;
-    height: 32px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    transition: background 200ms ease, color 200ms ease;
-  }
   .tab.active {
-    color: var(--primary-text);
-  }
-  .tab.active .pill {
-    background: var(--primary-soft);
+    color: var(--accent-text);
   }
   .label {
     font-size: 0.8125rem;
-    font-weight: 650;
+    font-weight: 600;
   }
   .center {
     justify-content: flex-end;
-    padding-bottom: 9px;
+    padding-bottom: 8px;
   }
+  /* Pulsante tondo lime in mezzo (come il + di Nutrizione): apre la fotocamera. */
   .fab {
-    width: 62px;
-    height: 62px;
-    margin-top: -26px;
+    width: 60px;
+    height: 60px;
+    margin-top: -24px;
     border-radius: 50%;
     border: 5px solid var(--bg);
-    background: var(--primary);
-    color: var(--on-primary);
+    background: var(--accent);
+    color: var(--accent-contrast);
     display: grid;
     place-items: center;
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 40%, transparent);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 45%, transparent);
     transition: transform 150ms ease;
   }
   .center:active .fab {
-    transform: scale(0.94);
+    transform: scale(0.96);
   }
-  .center.active .fab {
-    background: var(--primary-strong);
+  .center.active .label {
+    color: var(--accent-text);
   }
 </style>

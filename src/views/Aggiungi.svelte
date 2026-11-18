@@ -381,7 +381,7 @@
     position: relative;
     flex: 1;
     min-height: 420px;
-    border-radius: 28px;
+    border-radius: var(--radius);
     overflow: hidden;
     background: radial-gradient(circle at 50% 40%, #2a302b, var(--camera-bg));
     color: #fff;
@@ -649,9 +649,9 @@
     height: 80px;
     border-radius: 50%;
     border: 5px solid #fff;
-    background: var(--primary);
+    background: var(--accent);
     box-shadow: inset 0 0 0 4px var(--camera-bg);
-    color: #fff;
+    color: var(--accent-contrast);
     display: grid;
     place-items: center;
     cursor: pointer;
@@ -661,7 +661,7 @@
     transform: scale(0.92);
   }
   .shutter.barcode {
-    background: var(--coral);
+    background: var(--accent);
   }
   .error {
     margin-top: 12px;
@@ -687,7 +687,9 @@
     margin-top: 12px;
   }
   .manual {
-    min-height: 54px;
+    min-height: 56px;
+    border: 0;
+    box-shadow: var(--shadow);
   }
   .below .section-title {
     margin-top: 16px;

@@ -37,7 +37,7 @@
     margin: 0 auto;
     border-radius: 50%;
     border: 3px solid var(--surface-2);
-    border-top-color: var(--primary);
+    border-top-color: var(--accent);
     animation: spin 0.9s linear infinite;
   }
   @keyframes spin {

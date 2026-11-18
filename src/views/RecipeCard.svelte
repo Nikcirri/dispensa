@@ -85,8 +85,8 @@
     line-height: 1;
     width: 56px;
     height: 56px;
-    border-radius: 16px;
-    background: var(--surface-2);
+    border-radius: 18px;
+    background: var(--accent-soft);
     display: grid;
     place-items: center;
     flex: none;
@@ -175,7 +175,7 @@
     overflow-wrap: anywhere;
   }
   .missing.ok {
-    color: var(--primary-text);
+    color: var(--accent-text);
     font-weight: 600;
   }
   .why {
@@ -196,6 +196,7 @@
   .heart {
     color: var(--text-muted);
     background: var(--surface-2);
+    border-radius: 50%;
   }
   .heart.on {
     color: var(--coral);

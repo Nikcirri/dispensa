@@ -213,7 +213,7 @@
     background: var(--amber);
   }
   .verde .dotc {
-    background: var(--primary);
+    background: var(--accent);
   }
   .gone .grow {
     text-decoration: line-through;
@@ -249,8 +249,8 @@
     height: 30px;
     flex: none;
     border-radius: 50%;
-    background: var(--primary);
-    color: var(--on-primary);
+    background: var(--accent);
+    color: var(--accent-contrast);
     font-weight: 700;
     display: grid;
     place-items: center;

@@ -1,5 +1,5 @@
 import { mount } from 'svelte';
-import '@fontsource-variable/inter';
+import '@fontsource-variable/outfit';
 import './app.css';
 import App from './App.svelte';
 import { installGlobalErrorHandlers } from './lib/errors';

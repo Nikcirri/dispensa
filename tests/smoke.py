@@ -122,7 +122,7 @@ def main():
 
         page.route("https://generativelanguage.googleapis.com/**", route)
         page.goto(url)
-        page.wait_for_selector("text=Dispensa & Cucina IA")
+        page.wait_for_selector("text=Iniziamo")
         page.screenshot(path=f"{SHOTS}/01-onboarding.png")
         page.click("text=Inizia con qualche prodotto di prova")
         page.wait_for_selector("text=Oggi e domani")
@@ -147,10 +147,10 @@ def main():
         page.wait_for_timeout(300)
 
         # Filtro freezer e ricerca
-        page.click("button.chip:has-text('Freezer')")
+        page.click("button.tile:has-text('Freezer')")
         page.wait_for_timeout(200)
         assert page.locator("article.item").count() == 1, "filtro freezer"
-        page.click("button.chip:has-text('Freezer')")
+        page.click("button.tile:has-text('Freezer')")
         page.fill("input[type=search]", "yog")
         page.wait_for_timeout(200)
         assert page.locator("article.item").count() == 1, "ricerca"
@@ -211,7 +211,7 @@ def main():
         page.click("nav button:has-text('Ricette')")
         page.wait_for_timeout(500)
         page.screenshot(path=f"{SHOTS}/14-ricette.png")
-        page.click("text=Genera ricette con gli ingredienti in scadenza")
+        page.click("button.go:has-text('Genera ricette')")
         page.wait_for_selector("text=Frittata di zucchine", timeout=20000)
         page.wait_for_timeout(900)
         page.screenshot(path=f"{SHOTS}/15-ricette-risultati.png")

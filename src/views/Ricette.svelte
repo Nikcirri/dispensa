@@ -56,8 +56,11 @@
   }
 </script>
 
-<header class="top">
-  <h1>Cosa cucino?</h1>
+<header class="page-top">
+  <div class="grow">
+    <p class="hello">Svuota-frigo con l’IA</p>
+    <h1>Cosa cucino?</h1>
+  </div>
   {#if recipes.saved.length}
     <div class="segmented views">
       <button aria-pressed={recipes.view === 'nuove'} onclick={() => (recipes.view = 'nuove')}>Idee</button>
@@ -75,23 +78,32 @@
       <button class="btn btn-primary btn-big btn-block" onclick={() => (sheets.aiKey = true)}><Icon name="key" /> Collega Gemini</button>
     </div>
   {:else}
-    <button class="hero" disabled={recipes.loading || !app.items.length} onclick={() => void generateRecipes()}>
-      <span class="hero-icon" aria-hidden="true">
-        <Icon name="chef" size={40} />
-        <span class="spark"><Icon name="sparkles" size={20} /></span>
-      </span>
-      <span class="hero-title">Genera ricette con gli ingredienti in scadenza</span>
-      {#if !app.items.length}
-        <span class="hero-sub">Prima aggiungi qualche prodotto alla dispensa.</span>
-      {:else if first.length}
-        <span class="hero-sub">
-          Userò per primi:
-          {#each first as it, i (it.id)}<b>{it.emoji} {it.name}</b> ({badgeText(daysLeft(it, app.today), it.expiryKind).toLowerCase()}){i < first.length - 1 ? ', ' : ''}{/each}
+    <section class="lime-card hero">
+      <div class="hero-head">
+        <span class="hero-icon" aria-hidden="true">
+          <Icon name="chef" size={34} />
+          <span class="spark"><Icon name="sparkles" size={18} /></span>
         </span>
-      {:else}
-        <span class="hero-sub">Niente in scadenza: ricette con quello che hai.</span>
-      {/if}
-    </button>
+        <div class="hero-text">
+          <strong>Ricette con gli ingredienti in scadenza</strong>
+          {#if !app.items.length}
+            <span>Prima aggiungi qualche prodotto alla dispensa.</span>
+          {:else if first.length}
+            <span>
+              Userò per primi:
+              {#each first as it, i (it.id)}<b>{it.emoji} {it.name}</b> ({badgeText(daysLeft(it, app.today), it.expiryKind).toLowerCase()}){i < first.length - 1 ? ', ' : ''}{/each}
+            </span>
+          {:else}
+            <span>Niente in scadenza: ricette con quello che hai.</span>
+          {/if}
+        </div>
+      </div>
+      <button class="go" disabled={recipes.loading || !app.items.length} onclick={() => void generateRecipes()}>
+        <span class="go-icon"><Icon name="sparkles" size={22} /></span>
+        <span class="go-text">{recipes.loading ? 'Preparo le ricette…' : 'Genera ricette'}</span>
+        <span class="go-end"><Icon name="chevronRight" size={20} /></span>
+      </button>
+    </section>
 
     <div class="chips pills" role="group" aria-label="Filtri">
       {#each PILLS as p (p.id)}
@@ -142,18 +154,6 @@
 {/if}
 
 <style>
-  .top {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 6px 0 14px;
-    min-height: 48px;
-  }
-  h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 2rem;
-  }
   .views {
     flex: none;
   }
@@ -180,42 +180,31 @@
     line-height: 1;
   }
   .hero {
-    width: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 24px 20px;
-    border: 0;
-    border-radius: 28px;
-    background: linear-gradient(145deg, var(--primary), var(--primary-strong));
-    color: var(--on-primary);
-    text-align: center;
-    cursor: pointer;
-    box-shadow: 0 10px 28px color-mix(in srgb, var(--primary) 35%, transparent);
-    transition: transform 140ms ease;
+    gap: 16px;
   }
-  .hero:active {
-    transform: scale(0.98);
-  }
-  .hero:disabled {
-    opacity: 0.6;
-    cursor: default;
+  .hero-head {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
   }
   .hero-icon {
     position: relative;
-    width: 78px;
-    height: 78px;
-    border-radius: 50%;
-    background: rgb(255 255 255 / 0.2);
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    background: rgb(255 255 255 / 0.6);
+    color: var(--ring-on-lime);
     display: grid;
     place-items: center;
+    flex: none;
   }
   .spark {
     position: absolute;
-    top: 4px;
-    right: 2px;
-    color: #ffd27a;
+    top: -6px;
+    right: -6px;
+    color: #e09a1a;
     animation: twinkle 1.8s ease-in-out infinite;
   }
   @keyframes twinkle {
@@ -223,15 +212,26 @@
       transform: scale(1.25) rotate(12deg);
     }
   }
-  .hero-title {
-    font-size: 1.25rem;
-    font-weight: 750;
+  .hero-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hero-text strong {
+    font-size: 1.1875rem;
     line-height: 1.25;
   }
-  .hero-sub {
+  .hero-text span {
     font-size: 0.9375rem;
-    opacity: 0.92;
     line-height: 1.45;
+    opacity: 0.85;
+  }
+  @media (prefers-color-scheme: dark) {
+    .hero-icon {
+      background: var(--surface-2);
+    }
   }
   .pills {
     margin-top: 14px;
@@ -294,14 +294,14 @@
     align-items: center;
     gap: 10px;
     font-weight: 600;
-    color: var(--primary-text);
+    color: var(--accent-text);
   }
   .spinner {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    border: 3px solid var(--primary-soft);
-    border-top-color: var(--primary);
+    border: 3px solid var(--accent-soft);
+    border-top-color: var(--accent);
     animation: spin 0.9s linear infinite;
   }
   @keyframes spin {

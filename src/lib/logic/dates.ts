@@ -113,3 +113,10 @@ export function previousMonth(monthKey: string): string {
   const [y, m] = monthKey.split('-').map(Number) as [number, number];
   return m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;
 }
+
+/** Saluto in alto nella Dispensa (come Nutrizione). */
+export function greeting(hour: number): string {
+  if (hour >= 5 && hour < 13) return 'Buongiorno';
+  if (hour >= 13 && hour < 18) return 'Buon pomeriggio';
+  return 'Buonasera';
+}

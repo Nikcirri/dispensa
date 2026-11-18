@@ -1,6 +1,6 @@
 // Google Gemini (chiave personale dell'utente): scelta dei modelli, gara tra modelli, errori.
 // Solo funzioni pure: le richieste di rete sono in services/gemini.ts.
-// Stessa logica dell'app Nutrizione, già provata sul telefono dell'utente.
+// Stessa logica dell'app Nutrizione (fino alla 0.9.9), già provata sul telefono dell'utente.
 
 /** Toglie eventuali ```json … ``` e testo attorno, e restituisce l'oggetto JSON. */
 export function extractJson(text: string): unknown {
@@ -14,6 +14,7 @@ export function extractJson(text: string): unknown {
   }
 }
 
+
 /** Per ogni modello, fino a quando non usarlo (millisecondi), dopo un limite raggiunto o se non esiste. */
 export type ModelPauses = Record<string, number>;
 
@@ -22,7 +23,14 @@ export type ModelPauses = Record<string, number>;
 /** Un modello dell'elenco di Google (`models.list`). */
 export interface ListedModel {
   name: string;
+  displayName?: string;
   supportedGenerationMethods?: string[];
+}
+
+/** Un modello che può leggere le foto e scrivere ricette; `lite` = della famiglia leggera (Flash-Lite). */
+export interface ModelCandidate {
+  id: string;
+  lite: boolean;
 }
 
 /**
@@ -31,44 +39,84 @@ export interface ListedModel {
  */
 export const LATEST_ALIASES = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
 
-const FLASH_ID = /^gemini-(\d+(?:\.\d+)?)-flash(-lite)?(-preview)?$/;
+/**
+ * Nomi di Google: "gemini-" + versione + parole ("gemini-3.8-flash", "gemini-3.5-flash-lite",
+ * "gemini-4-hydrogen"). Le copie datate o numerate ("-001", "-preview-05-20") hanno cifre dopo la versione
+ * e restano fuori: sono doppioni di un modello già in elenco.
+ */
+const MODEL_ID = /^gemini-(\d+(?:\.\d+)?)-([a-z]+(?:-[a-z]+)*)$/;
 
 /**
- * I modelli da usare, dal migliore: i due Flash più nuovi e il Flash-Lite più nuovo dell'elenco di Google
- * (il livello gratuito vale solo per Flash e Flash-Lite). A pari versione prima quello stabile, poi la
- * "preview". Varianti speciali (immagini, audio, live…) escluse dal nome. Senza elenco valido: `fallback`.
+ * Parole dei modelli che non servono per leggere le foto o scrivere ricette (immagini, voce, video, ricerca…) o che non
+ * sono gratuiti e sono lenti (Pro, Ultra).
  */
-export function pickModels(listed: readonly ListedModel[] | null, fallback: readonly string[]): string[] {
-  if (!listed) return [...fallback];
+const NOT_FOR_MEALS = new Set([
+  'pro', 'ultra', 'embedding', 'tts', 'image', 'imagen', 'veo', 'video', 'live', 'audio', 'native', 'speech',
+  'dialog', 'realtime', 'music', 'lyria', 'robotics', 'computer', 'aqa', 'exp', 'thinking', 'learnlm',
+  'customtools', 'nano', 'banana', 'search', 'deep', 'research', 'decision', 'omni', 'latest', 'vision',
+]);
+
+/** Dal nome si capisce se è un modello della famiglia leggera (Flash-Lite). */
+export function isLiteId(id: string): boolean {
+  return /(^|-)lite(-|$)/.test(id);
+}
+
+/**
+ * I modelli dell’elenco di Google utili all’app, dal più nuovo. Non guarda la parola
+ * "flash": da Gemini 4 Google usa nomi di elementi ("gemini-4-hydrogen"), quindi basta il numero di
+ * versione. A pari versione prima lo stabile, poi la "preview" (se la stabile c'è, la preview è un doppione).
+ * Quali sono davvero gratuiti con la chiave dell'utente lo dice poi Google (vedi `isPaidOnly`).
+ */
+export function rankModels(listed: readonly ListedModel[]): ModelCandidate[] {
   const found = listed
     .filter((m) => (m.supportedGenerationMethods ?? ['generateContent']).includes('generateContent'))
     .map((m) => {
       const id = m.name.replace(/^models\//, '');
-      const match = FLASH_ID.exec(id);
-      return match ? { id, version: Number(match[1]), lite: Boolean(match[2]), preview: Boolean(match[3]) } : null;
+      const match = MODEL_ID.exec(id);
+      if (!match) return null;
+      const words = match[2]!.split('-');
+      if (words.some((w) => NOT_FOR_MEALS.has(w))) return null;
+      const version = Number(match[1]);
+      if (!Number.isFinite(version)) return null;
+      const preview = words.includes('preview');
+      const family = `${version}-${words.filter((w) => w !== 'preview').join('-')}`;
+      const lite = words.includes('lite') || /\blite\b/i.test(m.displayName ?? '');
+      return { id, version, preview, family, lite };
     })
-    .filter((m): m is NonNullable<typeof m> => m !== null && Number.isFinite(m.version))
+    .filter((m): m is NonNullable<typeof m> => m !== null)
     .sort((a, b) => b.version - a.version || Number(a.preview) - Number(b.preview));
-  // Un solo modello per versione (la "preview" di una versione già stabile è un doppione).
-  const onePerVersion = (list: typeof found) =>
-    list.filter((m, i) => list.findIndex((o) => o.version === m.version) === i);
-  const flash = onePerVersion(found.filter((m) => !m.lite)).slice(0, 2);
-  const lite = onePerVersion(found.filter((m) => m.lite)).slice(0, 1);
-  const out = [...flash, ...lite].map((m) => m.id);
-  return out.length ? out : [...fallback];
+  return found
+    .filter((m, i) => found.findIndex((o) => o.family === m.family) === i)
+    .map((m) => ({ id: m.id, lite: m.lite }));
 }
 
 /**
- * Modelli da provare adesso, sempre dal migliore: si saltano quelli in pausa.
- * Se sono tutti in pausa si provano comunque, nello stesso ordine.
+ * I modelli per una stima, dal migliore: i due migliori non leggeri e il miglior leggero tra quelli non in
+ * pausa (limite raggiunto, non gratuito, sparito). Se sono tutti in pausa si provano comunque i primi.
  */
-export function modelsToTry(models: readonly string[], pauses: ModelPauses, now: number): string[] {
+export function chooseModels(models: readonly string[], lite: readonly string[], pauses: ModelPauses, now: number): string[] {
   const ready = models.filter((m) => !((pauses[m] ?? 0) > now));
-  return ready.length ? ready : [...models];
+  const pool = ready.length ? ready : models;
+  const main = pool.filter((m) => !lite.includes(m)).slice(0, 2);
+  const light = pool.filter((m) => lite.includes(m)).slice(0, 1);
+  return [...main, ...light];
+}
+
+/**
+ * Google risponde "limite raggiunto" con limite 0 quando un modello non è compreso nel livello gratuito
+ * (per esempio Gemini 4 Argon e Carbon): non si libera a mezzanotte, va lasciato stare.
+ */
+export function isPaidOnly(json: unknown): boolean {
+  const err = (json as { error?: { message?: unknown; details?: unknown } } | null)?.error;
+  if (!err) return false;
+  const text = `${typeof err.message === 'string' ? err.message : ''} ${JSON.stringify(err.details ?? [])}`;
+  return /limit:\s*0(?!\d)/i.test(text) || /"quotaValue"\s*:\s*"?0"?[,}]/.test(text);
 }
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
+/** Un modello non gratuito si riprova dopo un mese (Google a volte lo apre al livello gratuito). */
+export const PAID_RECHECK_MS = 30 * DAY;
 
 /** Millisecondi fino alla prossima mezzanotte di Los Angeles (quando Google azzera i limiti giornalieri). */
 export function msToPacificMidnight(now: number): number {
@@ -87,12 +135,13 @@ export function msToPacificMidnight(now: number): number {
 /**
  * Fino a quando mettere in pausa un modello dopo una risposta di errore (null = nessuna pausa).
  * Limite giornaliero: fino alla mezzanotte di Los Angeles. Limite al minuto: il tempo indicato da Google
- * (almeno 30 secondi). Modello inesistente: una settimana.
+ * (almeno 30 secondi). Modello inesistente: una settimana. Modello non gratuito: un mese.
  */
 export function pauseUntil(status: number, json: unknown, now: number): number | null {
   const problem = geminiProblem(status, json);
   if (problem === 'model') return now + 7 * DAY;
   if (problem !== 'quota') return null;
+  if (isPaidOnly(json)) return now + PAID_RECHECK_MS;
   const details = (json as { error?: { details?: Record<string, unknown>[] } })?.error?.details ?? [];
   const text = JSON.stringify(details);
   if (/PerDay/i.test(text)) return now + msToPacificMidnight(now);
@@ -101,21 +150,24 @@ export function pauseUntil(status: number, json: unknown, now: number): number |
 }
 
 /** Com'è andato un tentativo con un modello (per spiegare all'utente cosa non ha funzionato). */
-export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error' | 'timeout' | 'network' | 'slower';
+export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'paid' | 'model' | 'error' | 'timeout' | 'network' | 'slower';
 
 export interface AiAttempt {
   model: string;
   outcome: AttemptOutcome;
-  /** Secondi dalla partenza dell'analisi alla risposta (per capire chi è lento). */
+  /** Secondi dalla partenza dell'analisi alla risposta (o a quando è stato fermato). */
   seconds?: number;
+  /** Dettaglio breve: codice d'errore, risposta troncata, formato più semplice… */
+  note?: string;
 }
 
 /**
- * Quanto ragionamento chiedere. Il ragionamento minimo è il più veloce ed è già quello normale del
- * Flash-Lite; il 3.6 Flash lo accetta, il 3.7 e il 3.8 Flash no (rispondono con un errore): a loro "low".
+ * Quanto ragionamento chiedere. Il ragionamento minimo è il più veloce: lo accettano i Flash-Lite 3 e il
+ * 3.5/3.6 Flash; il 3.7 e il 3.8 Flash e Gemini 4 Hydrogen no (rispondono con un errore). A tutti gli altri,
+ * compresi i modelli che usciranno, "low", che finora tutti accettano.
  */
 export function thinkingLevelFor(model: string): 'minimal' | 'low' {
-  return /flash-lite|gemini-3\.[56]-flash/.test(model) ? 'minimal' : 'low';
+  return /^gemini-3(?:\.\d+)?-flash-lite$|^gemini-3\.[56]-flash$/.test(model) ? 'minimal' : 'low';
 }
 
 /** "gemini-3.5-flash-lite" → "3.5 Flash-Lite". */
@@ -135,6 +187,7 @@ const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
   empty: 'niente riconosciuto',
   unreadable: 'risposta non leggibile',
   quota: 'limite gratuito raggiunto',
+  paid: 'non gratuito con la tua chiave',
   model: 'non disponibile',
   error: 'errore',
   timeout: 'nessuna risposta in tempo',
@@ -156,6 +209,12 @@ const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
 export const STAGGER_MS = 14_000;
 /** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori (stimano meglio). */
 export const GRACE_MS = 10_000;
+/**
+ * Oltre questo tempo dalla partenza non si concede più vantaggio: un modello migliore ancora zitto dopo
+ * 35 s di solito è bloccato (server di Google sovraccarichi). Il 18/11 una stima di sola descrizione aveva
+ * la risposta del Flash-Lite a 33 s ma aspettava Hydrogen fino a 43 s, inutilmente.
+ */
+export const GRACE_END_MS = 35_000;
 /**
  * Un modello è "lento con le foto" solo se è rimasto senza rispondere almeno questo tempo. Prima bastava
  * essere superati da un altro: in pochi giri tutti i modelli diventavano "lenti" e partivano insieme a ogni
@@ -191,6 +250,8 @@ export interface RaceState {
   overallMs?: number;
   /** Dopo quanto avviare il modello successivo (di solito `STAGGER_MS`; le ricette scrivono di più e aspettano di più). */
   staggerMs?: number;
+  /** Oltre quando non si aspetta più un modello migliore (di solito `GRACE_END_MS`). */
+  graceEndMs?: number;
 }
 
 export type RaceAction = { type: 'start' } | { type: 'wait' } | { type: 'use'; index: number } | { type: 'stop'; index: number } | { type: 'finish' };
@@ -198,12 +259,15 @@ export type RaceAction = { type: 'start' } | { type: 'wait' } | { type: 'use'; i
 /** Cosa fare adesso nella gara tra i modelli (funzione pura, vedi `analyzeMeal`). */
 export function raceStep(s: RaceState): RaceAction {
   const overall = s.overallMs ?? OVERALL_MS;
+  const graceEnd = s.graceEndMs ?? GRACE_END_MS;
   const stop = s.results.indexOf('stop');
   if (stop >= 0) return { type: 'stop', index: stop };
   const ok = s.results.indexOf('ok');
   if (ok >= 0) {
     const betterPending = s.results.slice(0, ok).some((r) => r === null);
-    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= overall) return { type: 'use', index: ok };
+    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= graceEnd || s.elapsed >= overall) {
+      return { type: 'use', index: ok };
+    }
     return { type: 'wait' };
   }
   const pending = s.results.filter((r) => r === null).length;
@@ -220,7 +284,26 @@ export const SLOW_FOR_MS = 24 * 60 * 60 * 1000;
 
 /** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: niente riconosciuto". */
 export function describeAttempts(attempts: AiAttempt[]): string {
-  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${a.seconds !== undefined ? ` (${a.seconds} s)` : ''}`).join(' · ');
+  return attempts
+    .map((a) => {
+      const extra = [a.note, a.seconds !== undefined ? `${a.seconds} s` : undefined].filter(Boolean).join(', ');
+      return `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${extra ? ` (${extra})` : ''}`;
+    })
+    .join(' · ');
+}
+
+/**
+ * Perché una risposta arrivata non ha il contenuto atteso (da `finishReason` di Gemini): troncata, bloccata, vuota.
+ * Undefined se è finita normalmente.
+ */
+export function finishNote(json: unknown): string | undefined {
+  const c = (json as { candidates?: { finishReason?: unknown }[] } | null)?.candidates?.[0];
+  if (!c) return 'vuota';
+  const reason = typeof c.finishReason === 'string' ? c.finishReason : '';
+  if (!reason || reason === 'STOP') return undefined;
+  if (reason === 'MAX_TOKENS') return 'troncata';
+  if (/SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/.test(reason)) return 'bloccata';
+  return reason.toLowerCase();
 }
 
 /**
@@ -243,6 +326,7 @@ export function looksBlank(rgba: ArrayLike<number>): boolean {
   return sd < 2.5 || (mean < 10 && sd < 6);
 }
 
+/** Messaggio durante l'attesa, in base ai secondi passati. */
 // ---------- Risposta dell'API di Gemini ----------
 
 /** Testo della risposta (senza le parti di "ragionamento"). */

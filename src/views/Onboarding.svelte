@@ -6,6 +6,7 @@
   import { askNotificationPermission } from '../lib/services/notifications';
   import { addDrafts, app, scheduleNotifications, updateSettings } from '../lib/state/app.svelte';
   import Icon from '../lib/ui/Icon.svelte';
+  import Ring from '../lib/ui/Ring.svelte';
 
   let starting = $state(false);
 
@@ -43,106 +44,127 @@
   }
 </script>
 
-<div class="onb">
-  <div class="logo" aria-hidden="true">
-    <svg viewBox="0 0 108 108" width="96" height="96">
-      <rect width="108" height="108" rx="28" fill="#4E8752" />
-      <path d="M43 29h22a3 3 0 0 1 3 3v5H40v-5a3 3 0 0 1 3-3z" fill="#F2A65A" />
-      <path d="M39 40h30a5 5 0 0 1 5 5v23a9 9 0 0 1-9 9H43a9 9 0 0 1-9-9V45a5 5 0 0 1 5-5z" fill="#fff" />
-      <path d="M45 69C45 58 51 51 63 51C63 62 57 69 45 69Z" fill="#4E8752" />
-      <path d="M45 69L57 57" stroke="#fff" stroke-width="2" stroke-linecap="round" />
-    </svg>
+<div class="screen">
+  <div class="bar">
+    <span class="brand"><Icon name="jar" size={20} /> Dispensa</span>
   </div>
-  <h1>Dispensa &amp; Cucina IA</h1>
-  <p class="lead">Frigo e dispensa sotto controllo, zero sprechi.</p>
 
-  <ul class="features">
-    <li>
-      <span class="ic"><Icon name="camera" /></span>
-      <span><strong>Fotografa l’etichetta</strong>: leggo nome e scadenza in un colpo solo. Oppure il codice a barre, o lo scontrino.</span>
-    </li>
-    <li>
-      <span class="ic red">⏰</span>
-      <span><strong>Scadenze a colori</strong>: rosso oggi e domani, arancione entro 5 giorni. Ti avviso io.</span>
-    </li>
-    <li>
-      <span class="ic"><Icon name="chef" /></span>
-      <span><strong>Cosa cucino?</strong> Ricette con quello che sta per scadere.</span>
-    </li>
-  </ul>
+  <section class="welcome">
+    <h1>Niente più<br />sprechi in cucina.</h1>
+    <div class="hero-card">
+      <Ring value={0.7} size={116} stroke={11} color="var(--ring-on-lime)" track="var(--ring-track-on-lime)">
+        <span class="num ring-n">3</span>
+        <span class="ring-c">da usare<br />oggi</span>
+      </Ring>
+      <ul>
+        <li><Icon name="camera" size={18} /> Foto dell’etichetta: nome e scadenza</li>
+        <li><Icon name="barcode" size={18} /> Codice a barre e scontrino</li>
+        <li><Icon name="clock" size={18} /> Scadenze a colori e avvisi</li>
+        <li><Icon name="chef" size={18} /> Ricette con quello che scade</li>
+      </ul>
+    </div>
+    <p class="lead">Rosso se scade oggi o domani, arancione entro 5 giorni. Ti avviso io e ti propongo cosa cucinare. I dati restano solo sul telefono.</p>
+  </section>
 
-  <div class="buttons">
-    <button class="btn btn-primary btn-big btn-block" disabled={starting} onclick={() => start(false)}>Inizia</button>
+  <div class="footer">
+    <button class="go" disabled={starting} onclick={() => start(false)}>
+      <span class="go-icon"><Icon name="chevronRight" /></span>
+      <span class="go-text">Iniziamo</span>
+      <span class="go-end"><Icon name="check" size={18} /></span>
+    </button>
     <button class="btn btn-ghost btn-block" disabled={starting} onclick={() => start(true)}>Inizia con qualche prodotto di prova</button>
+    <p class="note center">Android ti chiederà il permesso per gli avvisi delle scadenze.</p>
   </div>
-  <p class="note">Tutto resta sul tuo telefono. Android ti chiederà il permesso per gli avvisi delle scadenze.</p>
 </div>
 
 <style>
-  .onb {
+  .screen {
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: calc(var(--safe-top) + 40px) 24px calc(var(--safe-bottom) + 24px);
-    text-align: center;
-    gap: 10px;
-    max-width: 520px;
+    padding: calc(var(--safe-top) + 12px) 20px calc(var(--safe-bottom) + 16px);
+    max-width: 560px;
     margin: 0 auto;
   }
-  .logo {
-    animation: drop 500ms cubic-bezier(0.2, 1.4, 0.4, 1);
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
   }
-  @keyframes drop {
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: var(--accent-text);
+    white-space: nowrap;
+  }
+  section {
+    flex: 1;
+    padding-top: 16px;
+  }
+  h1 {
+    font-size: 2.5rem;
+    line-height: 1.05;
+    margin: 12px 0 20px;
+  }
+  .lead {
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .hero-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+    border-radius: var(--radius);
+    background: var(--lime-card);
+    color: var(--lime-card-text);
+    margin-bottom: 18px;
+    animation: rise 450ms cubic-bezier(0.2, 1.2, 0.4, 1);
+  }
+  @keyframes rise {
     from {
-      transform: translateY(-20px) scale(0.8);
+      transform: translateY(14px);
       opacity: 0;
     }
   }
-  h1 {
-    margin: 8px 0 0;
-    font-size: 1.875rem;
+  .ring-n {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
   }
-  .lead {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 1.0625rem;
+  .ring-c {
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    opacity: 0.75;
   }
-  .features {
+  ul {
     list-style: none;
-    margin: 20px 0 8px;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    text-align: left;
+    gap: 10px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    min-width: 0;
   }
-  .features li {
+  li {
     display: flex;
-    gap: 14px;
-    align-items: flex-start;
-    line-height: 1.45;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.25;
   }
-  .ic {
-    flex: none;
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
-    background: var(--primary-soft);
-    color: var(--primary-text);
-    display: grid;
-    place-items: center;
-    font-size: 1.4rem;
-  }
-  .ic.red {
-    background: var(--red-soft);
-  }
-  .buttons {
-    width: 100%;
-    margin-top: auto;
-    padding-top: 20px;
+  .footer {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding-top: 16px;
+  }
+  .center {
+    text-align: center;
   }
 </style>

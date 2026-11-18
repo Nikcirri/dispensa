@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry, Item } from '../types';
 import { BackupError, makeBackup, parseBackup } from './backup';
-import { addDays, addMonths, daysBetween, formatShort, isDateKey, lastDayOfMonth } from './dates';
+import { addDays, addMonths, daysBetween, formatShort, greeting, isDateKey, lastDayOfMonth } from './dates';
 import { draftFromName, itemFromDraft, templateFromItem, templateKey } from './drafts';
 import { badgeText, compareByExpiry, daysLeft, effectiveExpiry, expiryText, limitedByOpening, urgencyOf } from './expiry';
 import { formatQuantity, guessFood, quantityStep } from './foods';
@@ -49,6 +49,9 @@ describe('date', () => {
     expect(isDateKey('12/03/2027')).toBe(false);
     expect(formatShort('2026-12-03', TODAY)).toBe('3 dic');
     expect(formatShort('2027-03-12', TODAY)).toBe('12 mar 2027');
+    expect(greeting(9)).toBe('Buongiorno');
+    expect(greeting(15)).toBe('Buon pomeriggio');
+    expect(greeting(22)).toBe('Buonasera');
   });
 });
 

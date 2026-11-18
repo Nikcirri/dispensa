@@ -1,71 +1,86 @@
-/* Colori: chiaro e scuro seguono l'impostazione del telefono.
-   Verde salvia per freschezza e azioni principali; ambra e corallo per gli avvisi di scadenza. */
+/* Colori: chiaro e scuro seguono l'impostazione del telefono. Stessa linea dell'app Nutrizione:
+   sfondo grigio-verde chiaro, schede bianche, verde lime per le azioni, schede lime per i riassunti,
+   pulsanti scuri ("ink") per le azioni grandi. Rosso corallo e ambra restano per gli avvisi di scadenza. */
 :root {
-  --bg: #f8f9fa;
+  --bg: #f1f3ee;
   --surface: #ffffff;
-  --surface-2: #f1f3f2;
-  --text: #1b201c;
-  --text-muted: #687069;
-  --primary: #4e8752;
-  --primary-strong: #3f7043;
-  --primary-text: #2f6834;
-  --primary-soft: #e6f0e6;
-  --on-primary: #ffffff;
-  --border: #e3e7e4;
+  --surface-2: #f2f4ee;
+  --text: #151c16;
+  --text-muted: #727d74;
+  /* Verde lime: riempimenti, anelli, pulsanti. Su bianco i testi usano --accent-text. */
+  --accent: #8ccf4d;
+  --accent-strong: #7bbd3d;
+  --accent-text: #3d7a1c;
+  --accent-soft: #e6f5d3;
+  --accent-contrast: #132008;
+  --lime-card: linear-gradient(140deg, #dff5bf 0%, #c6ec92 100%);
+  --lime-card-text: #18260c;
+  --ring-on-lime: #3f8a1f;
+  --ring-track-on-lime: rgb(255 255 255 / 0.6);
+  --ink: #161d17;
+  --ink-contrast: #ffffff;
+  --border: #e4e8df;
   /* Bollini delle scadenze */
-  --red: #d9473a;
-  --red-soft: #fde7e3;
-  --red-text: #a8261b;
-  --amber: #f0a04b;
-  --amber-soft: #fdf0dc;
-  --amber-text: #8f5309;
-  --green-soft: #e4f0e4;
-  --green-text: #2f6834;
-  --grey-soft: #eef0ef;
-  --grey-text: #5c645e;
-  --coral: #ef7b5f;
-  --danger: #c0352a;
-  --warning-bg: #fff4dc;
-  --warning-text: #6b4a00;
+  --red: #e5533d;
+  --red-soft: #fde6e1;
+  --red-text: #a8291a;
+  --amber: #f0b13a;
+  --amber-soft: #fdf1d7;
+  --amber-text: #855400;
+  --green-soft: #e6f5d3;
+  --green-text: #3d7a1c;
+  --grey-soft: #eceee9;
+  --grey-text: #5d665f;
+  --coral: #ff8a3d;
+  --danger: #c62f25;
+  --warning-bg: #fff4d6;
+  --warning-text: #6b4e00;
   --camera-bg: #121513;
-  --shadow: 0 1px 2px rgb(20 30 22 / 0.04), 0 6px 20px rgb(20 30 22 / 0.06);
-  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Roboto', 'Segoe UI', sans-serif;
+  --shadow: 0 1px 2px rgb(20 30 20 / 0.04), 0 6px 20px rgb(20 30 20 / 0.05);
+  --font-sans: 'Outfit Variable', system-ui, -apple-system, 'Roboto', 'Segoe UI', sans-serif;
   --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
-  --navbar-h: 70px;
-  --radius: 22px;
+  --navbar-h: 68px;
+  --radius: 24px;
   color-scheme: light;
   /* Livelli: barra in basso 20 · fogli 40 · attesa 80 · dialoghi 85 · toast 95. */
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Tema scuro neutro: sfondi e schede grigio/nero, il verde resta solo sui pulsanti e sugli indicatori. */
   :root {
-    --bg: #0f1210;
-    --surface: #1a1e1b;
-    --surface-2: #242925;
-    --text: #eef1ee;
-    --text-muted: #a2aaa3;
-    --primary: #6aa96e;
-    --primary-strong: #7dbb81;
-    --primary-text: #9fd3a2;
-    --primary-soft: #223024;
-    --on-primary: #0d1a0e;
-    --border: #2c322d;
-    --red: #ff7a6b;
-    --red-soft: #3d1f1b;
-    --red-text: #ffb3a8;
-    --amber: #f5b366;
-    --amber-soft: #3a2c16;
-    --amber-text: #ffd49b;
-    --green-soft: #1f2e20;
-    --green-text: #a5d8a8;
-    --grey-soft: #262b27;
-    --grey-text: #b3bab4;
-    --coral: #ff9478;
+    --bg: #0b0b0b;
+    --surface: #171717;
+    --surface-2: #222222;
+    --text: #f2f2f2;
+    --text-muted: #a3a3a3;
+    --accent: #9ad85a;
+    --accent-strong: #aee070;
+    --accent-text: #b4e67f;
+    --accent-soft: #262626;
+    --accent-contrast: #132008;
+    --lime-card: #1c1c1c;
+    --lime-card-text: #f2f2f2;
+    --ring-on-lime: #9ad85a;
+    --ring-track-on-lime: #2e2e2e;
+    --ink: #f2f2f2;
+    --ink-contrast: #111111;
+    --border: #2a2a2a;
+    --red: #ff7a5f;
+    --red-soft: #3a1d18;
+    --red-text: #ffb4a6;
+    --amber: #f4bf55;
+    --amber-soft: #352a12;
+    --amber-text: #f8d68f;
+    --green-soft: #1f2a17;
+    --green-text: #b4e67f;
+    --grey-soft: #262626;
+    --grey-text: #b5b5b5;
+    --coral: #ff9c5a;
     --danger: #ffb4ab;
     --warning-bg: #3a2f10;
     --warning-text: #f3dc9b;
-    --camera-bg: #050605;
+    --camera-bg: #050505;
     --shadow: none;
     color-scheme: dark;
   }
@@ -116,8 +131,8 @@ textarea {
 h1,
 h2,
 h3 {
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
@@ -126,6 +141,158 @@ h3 {
 }
 
 /* ---------- Componenti di base ---------- */
+
+/* Intestazione delle schede (come Nutrizione): riga piccola grigia sopra, titolo grande sotto. */
+.page-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.page-top .grow {
+  flex: 1;
+  min-width: 0;
+}
+.page-top .hello {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.page-top h1 {
+  margin: 2px 0 0;
+  font-size: 1.625rem;
+}
+
+/* Pulsante tondo bianco (calendario di Nutrizione); `small` è grigio e più piccolo. */
+.circle-btn {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  color: var(--text);
+  transition: transform 120ms ease;
+}
+.circle-btn:active {
+  transform: scale(0.94);
+}
+.circle-btn.small {
+  width: 40px;
+  height: 40px;
+  box-shadow: none;
+  background: var(--surface-2);
+}
+.circle-btn.lime {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.circle-btn:disabled {
+  opacity: 0.35;
+}
+
+/* Pulsante grande scuro con il cerchio lime (come "Iniziamo" di Nutrizione). */
+.go {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--ink);
+  color: var(--ink-contrast);
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 1.0625rem;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.go:active {
+  transform: scale(0.98);
+}
+.go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.go-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.go-text {
+  flex: 1;
+  text-align: center;
+  padding: 0 4px;
+}
+.go-end {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: grid;
+  place-items: center;
+  opacity: 0.8;
+  flex: none;
+}
+
+/* Scheda lime dei riassunti (anello + righe), come il riassunto delle calorie di Nutrizione. */
+.lime-card {
+  border-radius: var(--radius);
+  background: var(--lime-card);
+  color: var(--lime-card-text);
+  padding: 18px;
+}
+.stat-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgb(0 0 0 / 0.08);
+  font-size: 0.9375rem;
+}
+.stat-line:last-child {
+  border-bottom: 0;
+}
+.stat-line strong {
+  font-size: 1.125rem;
+}
+.stat-line .dot-c {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+@media (prefers-color-scheme: dark) {
+  .stat-line {
+    border-bottom-color: var(--border);
+  }
+}
+
+/* Riquadro con l'icona (come le icone dei pasti di Nutrizione). */
+.icon-tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
 
 .btn {
   min-height: 50px;
@@ -151,9 +318,14 @@ h3 {
   cursor: default;
 }
 .btn-primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.btn-ink {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--ink-contrast);
 }
 .btn-big {
   min-height: 58px;
@@ -161,9 +333,9 @@ h3 {
   font-weight: 700;
 }
 .btn-soft {
-  background: var(--primary-soft);
+  background: var(--accent-soft);
   border-color: transparent;
-  color: var(--primary-text);
+  color: var(--accent-text);
 }
 .btn-danger {
   background: transparent;
@@ -207,13 +379,13 @@ h3 {
 }
 .dot {
   position: absolute;
-  top: 4px;
-  right: 2px;
+  top: -2px;
+  right: -2px;
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--coral);
+  background: var(--red);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -241,7 +413,7 @@ h3 {
   background: var(--surface);
 }
 .input:focus {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 .input[type='date']:focus,
@@ -273,7 +445,7 @@ select.input {
 .section-title {
   margin: 22px 4px 10px;
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -343,7 +515,8 @@ select.input {
 }
 .segmented button[aria-pressed='true'] {
   background: var(--surface);
-  color: var(--primary-text);
+  color: var(--accent-text);
+  font-weight: 650;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.08);
 }
 
@@ -382,10 +555,10 @@ select.input {
   transform: scale(0.96);
 }
 .chip[aria-pressed='true'] {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
-  font-weight: 650;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
 }
 .chip .count {
   font-size: 0.8125rem;
@@ -454,19 +627,19 @@ select.input {
   transition: transform 150ms ease, background 150ms ease;
 }
 .switch:checked {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .switch:checked::after {
   transform: translateX(20px);
-  background: var(--on-primary);
+  background: var(--accent-contrast);
 }
 
 .link {
   border: 0;
   background: transparent;
   padding: 0;
-  color: var(--primary-text);
+  color: var(--accent-text);
   font-weight: 600;
   text-decoration: underline;
   cursor: pointer;

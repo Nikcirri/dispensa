@@ -31,7 +31,7 @@
 <div class="stepper" class:compact>
   <button class="step" aria-label="Meno" onclick={() => change(-1)}><Icon name="minus" size={compact ? 18 : 20} /></button>
   {#key bump}<span class="value num">{formatQuantity(quantity, unit)}</span>{/key}
-  <button class="step" aria-label="Più" onclick={() => change(1)}><Icon name="plus" size={compact ? 18 : 20} /></button>
+  <button class="step plus" aria-label="Più" onclick={() => change(1)}><Icon name="plus" size={compact ? 18 : 20} /></button>
 </div>
 
 <style>
@@ -53,15 +53,24 @@
     place-items: center;
     cursor: pointer;
     color: var(--text);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
     transition: transform 100ms ease;
   }
   .step:active {
     transform: scale(0.9);
   }
+  .step.plus {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    box-shadow: none;
+  }
   .compact .step {
     width: 36px;
     height: 36px;
+  }
+  .compact .value {
+    min-width: 48px;
+    padding: 0 2px;
   }
   .value {
     min-width: 58px;
