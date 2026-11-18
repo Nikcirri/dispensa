@@ -4,6 +4,7 @@ import type { BackupData } from './logic/backup';
 import { daysLeft } from './logic/expiry';
 import { templateFromItem, templateKey } from './logic/drafts';
 import type { ModelPauses } from './logic/gemini';
+import type { Meal } from './logic/meals';
 import { sanitizeRecipe, type Recipe } from './logic/recipes';
 import { defaultSettings, sanitizeSettings } from './logic/settings';
 import { addToList } from './logic/shopping';
@@ -180,27 +181,53 @@ export async function getLastRecipesNote(db: PantryDB): Promise<{ text: string; 
 // ---------- Backup ----------
 
 export async function exportAll(db: PantryDB): Promise<BackupData> {
-  const [settings, items, history, shopping, templates, recipes] = await Promise.all([
+  const [settings, items, history, shopping, templates, recipes, meals] = await Promise.all([
     loadSettings(db),
     db.items.toArray(),
     db.history.toArray(),
     db.shopping.toArray(),
     db.templates.toArray(),
     db.recipes.toArray(),
+    db.meals.toArray(),
   ]);
-  return { settings, items, history: history.map(({ id: _id, ...h }) => h), shopping, templates, recipes };
+  return { settings, items, history: history.map(({ id: _id, ...h }) => h), shopping, templates, recipes, meals };
 }
 
 /** Sostituisce tutti i dati con quelli del backup (la chiave di Gemini resta). */
 export async function importAll(db: PantryDB, data: BackupData): Promise<void> {
-  await db.transaction('rw', [db.items, db.history, db.shopping, db.templates, db.recipes, db.kv], async () => {
-    await Promise.all([db.items.clear(), db.history.clear(), db.shopping.clear(), db.templates.clear(), db.recipes.clear()]);
+  await db.transaction('rw', [db.items, db.history, db.shopping, db.templates, db.recipes, db.meals, db.kv], async () => {
+    await Promise.all([db.items.clear(), db.history.clear(), db.shopping.clear(), db.templates.clear(), db.recipes.clear(), db.meals.clear()]);
     await db.items.bulkPut(data.items);
     await db.history.bulkAdd(data.history.map(({ id: _id, ...h }) => h));
     await db.shopping.bulkPut(data.shopping);
     await db.templates.bulkPut(data.templates);
     await db.recipes.bulkPut(data.recipes);
+    await db.meals.bulkPut(data.meals);
     await saveSettings(db, data.settings);
     await db.kv.bulkDelete(['lastRecipes', 'lastRecipesNote']);
   });
+}
+
+// ---------- Piano dei pasti ----------
+
+/** Pasti tra due giorni compresi (AAAA-MM-GG). */
+export async function mealsBetween(db: PantryDB, from: string, to: string): Promise<Meal[]> {
+  return db.meals.where('date').between(from, to, true, true).toArray();
+}
+
+export async function saveMeals(db: PantryDB, meals: readonly Meal[]): Promise<void> {
+  await db.meals.bulkPut(JSON.parse(JSON.stringify(meals)) as Meal[]);
+}
+
+export async function updateMeal(db: PantryDB, id: string, change: Partial<Omit<Meal, 'id'>>): Promise<void> {
+  await db.meals.update(id, JSON.parse(JSON.stringify(change)) as Partial<Meal>);
+}
+
+export async function deleteMeal(db: PantryDB, id: string): Promise<void> {
+  await db.meals.delete(id);
+}
+
+/** Toglie i pasti vecchi (più di 120 giorni fa): il piano resta leggero. */
+export async function pruneMeals(db: PantryDB, before: string): Promise<number> {
+  return db.meals.where('date').below(before).delete();
 }

@@ -4,6 +4,7 @@ import type { HistoryEntry, Item, Settings, ShoppingItem, Template } from '../ty
 import { isDateKey } from './dates';
 import { isUnit } from './foods';
 import { isLocation } from './pantry';
+import { sanitizeMeal, type Meal } from './meals';
 import { sanitizeRecipe, type Recipe } from './recipes';
 import { sanitizeSettings } from './settings';
 
@@ -16,6 +17,8 @@ export interface BackupData {
   shopping: ShoppingItem[];
   templates: Template[];
   recipes: Recipe[];
+  /** Piano dei pasti (dalla 1.2.0; i backup vecchi non lo hanno). */
+  meals: Meal[];
 }
 
 export class BackupError extends Error {
@@ -139,5 +142,6 @@ export function parseBackup(text: string): BackupData {
     shopping: list(d.shopping, sanitizeShopping),
     templates: list(d.templates, sanitizeTemplate),
     recipes: list(d.recipes, sanitizeRecipe),
+    meals: list(d.meals, sanitizeMeal),
   };
 }

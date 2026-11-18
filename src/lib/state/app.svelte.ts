@@ -1,10 +1,12 @@
 // Stato principale dell'app: impostazioni, scheda aperta, dati della dispensa, fogli aperti, azioni comuni.
 import { db } from '../db';
 import { reportError } from '../errors';
-import { todayKey } from '../logic/dates';
+import { addDays, todayKey } from '../logic/dates';
 import { applyDraft, itemFromDraft, type ProductDraft } from '../logic/drafts';
+import type { Meal, MealSlot } from '../logic/meals';
 import type { Recipe } from '../logic/recipes';
 import { defaultSettings } from '../logic/settings';
+import { widgetData } from '../logic/widget';
 import { tapFeedback } from '../platform';
 import {
   addShopping,
@@ -12,6 +14,8 @@ import {
   allShopping,
   getAiKey,
   loadSettings,
+  mealsBetween,
+  pruneMeals,
   recentTemplates,
   removeItem,
   saveItem,
@@ -20,10 +24,11 @@ import {
   updateItem,
 } from '../repo';
 import { rescheduleExpiryNotifications } from '../services/notifications';
+import { pushWidgets } from '../services/widgets';
 import type { Item, Outcome, Settings, ShoppingItem, Template } from '../types';
 import { showToast, showUndoToast } from './ui.svelte';
 
-export type Tab = 'dispensa' | 'aggiungi' | 'ricette';
+export type Tab = 'dispensa' | 'ricette' | 'aggiungi' | 'pasti' | 'spesa';
 
 export const app = $state({
   ready: false,
@@ -33,8 +38,19 @@ export const app = $state({
   items: [] as Item[],
   shopping: [] as ShoppingItem[],
   templates: [] as Template[],
+  /** Piano dei pasti (dagli ultimi mesi in avanti). */
+  meals: [] as Meal[],
   aiKey: '',
 });
+
+/** Pasti tenuti in memoria e nel database: i più vecchi si cancellano da soli. */
+export const MEALS_KEEP_DAYS = 120;
+
+/** Un pasto nuovo per quel giorno, oppure uno già nel piano da guardare o cambiare. */
+export type MealRequest = { mode: 'new'; date: string; slot: MealSlot } | { mode: 'edit'; id: string };
+
+/** Scegliere giorno e pasto: per mettere una ricetta nel piano o spostare un pasto. */
+export type PlanRequest = { recipe: Recipe } | { mealId: string };
 
 export interface ProductRequest {
   /** `new`: prodotto nuovo; `edit`: modifica di uno in dispensa. */
@@ -52,36 +68,93 @@ export interface ProductRequest {
 export const sheets = $state({
   product: null as ProductRequest | null,
   multi: null as { drafts: ProductDraft[]; note: string; shoppingIds?: string[]; aiInfo?: string } | null,
-  shopping: false,
   settings: false,
   stats: false,
   aiKey: false,
   recipe: null as Recipe | null,
+  /** Il pasto del piano da cui è stata aperta la ricetta (con "L'ho cucinata" si segna fatto). */
+  recipeMealId: null as string | null,
   cooked: null as Recipe | null,
+  meal: null as MealRequest | null,
+  plan: null as PlanRequest | null,
+  planAi: false,
 });
 
 /** Chiude tutti i fogli (per esempio quando si apre l'app da una notifica). */
 export function closeAllSheets(): void {
   sheets.product = null;
   sheets.multi = null;
-  sheets.shopping = false;
   sheets.settings = false;
   sheets.stats = false;
   sheets.aiKey = false;
   sheets.recipe = null;
+  sheets.recipeMealId = null;
   sheets.cooked = null;
+  sheets.meal = null;
+  sheets.plan = null;
+  sheets.planAi = false;
 }
 
 export function anySheetOpen(): boolean {
-  return !!(sheets.product || sheets.multi || sheets.shopping || sheets.settings || sheets.stats || sheets.aiKey || sheets.recipe || sheets.cooked);
+  return !!(
+    sheets.product ||
+    sheets.multi ||
+    sheets.settings ||
+    sheets.stats ||
+    sheets.aiKey ||
+    sheets.recipe ||
+    sheets.cooked ||
+    sheets.meal ||
+    sheets.plan ||
+    sheets.planAi
+  );
+}
+
+/** Apre una ricetta; `mealId` se viene dal piano dei pasti. */
+export function openRecipe(recipe: Recipe, mealId: string | null = null): void {
+  sheets.recipeMealId = mealId;
+  sheets.recipe = recipe;
 }
 
 export async function initApp(): Promise<void> {
   app.settings = await loadSettings(db);
   app.aiKey = await getAiKey(db);
-  await Promise.all([reloadItems(false), reloadShopping(), reloadTemplates()]);
+  await pruneMeals(db, addDays(app.today, -MEALS_KEEP_DAYS)).catch(() => 0);
+  await Promise.all([reloadItems(false), reloadShopping(), reloadTemplates(), loadMeals()]);
   app.ready = true;
   scheduleNotifications();
+  syncWidgets();
+}
+
+async function loadMeals(): Promise<void> {
+  app.meals = await mealsBetween(db, addDays(app.today, -MEALS_KEEP_DAYS), '9999-12-31');
+}
+
+/** Ricarica il piano dei pasti (e aggiorna i widget). */
+export async function reloadMeals(): Promise<void> {
+  await loadMeals();
+  syncWidgets();
+}
+
+// ---------- Widget ----------
+
+let widgetTimer: ReturnType<typeof setTimeout> | undefined;
+let lastWidget = '';
+
+/** Passa ai widget della schermata Home i prodotti e i pasti, poco dopo l'ultima modifica. */
+export function syncWidgets(): void {
+  clearTimeout(widgetTimer);
+  widgetTimer = setTimeout(() => {
+    if (!app.ready || !app.settings.onboarded) return;
+    const data = widgetData($state.snapshot(app.items) as Item[], $state.snapshot(app.meals) as Meal[], app.today);
+    const key = JSON.stringify(data);
+    if (key === lastWidget) return;
+    lastWidget = key;
+    pushWidgets(data).catch(() => {
+      // I widget sono un extra: se l'invio non riesce si riprova alla prossima modifica.
+      lastWidget = '';
+    });
+  }, 800);
 }
 
 export async function updateSettings(change: (s: Settings) => void): Promise<void> {
@@ -92,7 +165,10 @@ export async function updateSettings(change: (s: Settings) => void): Promise<voi
 /** A mezzanotte "oggi" cambia (colori e testi si aggiornano). */
 export function tickToday(): void {
   const now = todayKey();
-  if (now !== app.today) app.today = now;
+  if (now !== app.today) {
+    app.today = now;
+    syncWidgets();
+  }
 }
 
 // ---------- Avvisi ----------
@@ -114,6 +190,7 @@ export function scheduleNotifications(): void {
 export async function reloadItems(reschedule = true): Promise<void> {
   app.items = await allItems(db);
   if (reschedule) scheduleNotifications();
+  syncWidgets();
 }
 
 export async function reloadShopping(): Promise<void> {

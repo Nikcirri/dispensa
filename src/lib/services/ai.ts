@@ -1,6 +1,7 @@
-// Le due funzioni IA dell'app: leggere una foto e proporre ricette.
+// Le funzioni IA dell'app: leggere una foto, proporre ricette e programmare i pasti.
 import { todayKey } from '../logic/dates';
 import type { AiProgress } from '../logic/gemini';
+import { buildPlanPrompt, parsePlan, PLAN_SCHEMA, type PlanOptions, type PlanResult, type PlanSlot } from '../logic/plan';
 import { buildRecipePrompt, parseRecipes, RECIPES_SCHEMA, type RecipeFilters, type RecipeResult } from '../logic/recipes';
 import { buildScanPrompt, parseScan, SCAN_SCHEMA, type ScanMode, type ScanResult } from '../logic/scan';
 import type { Item } from '../types';
@@ -48,6 +49,30 @@ export async function suggestRecipes(
     overallMs: 110_000,
     // Scrivere 3 ricette richiede di solito 10–25 s: il secondo modello parte solo se il primo tarda davvero.
     staggerMs: 35_000,
+    onProgress,
+  });
+}
+
+export async function planMeals(
+  key: string,
+  items: readonly Item[],
+  slots: readonly PlanSlot[],
+  options: PlanOptions,
+  onProgress?: (p: AiProgress) => void,
+): Promise<GeminiResult<PlanResult>> {
+  const today = todayKey();
+  const { prompt, refs } = buildPlanPrompt(items, today, slots, options);
+  return runGemini(key, {
+    prompt,
+    image: null,
+    schema: PLAN_SCHEMA,
+    parse: (text) => parsePlan(text, refs, slots, options.servings, new Date().toISOString()),
+    isEmpty: (r) => r.proposals.length === 0,
+    // Tanti pasti = risposta lunga: più tempo che per 3 ricette.
+    fullTimeoutMs: 80_000,
+    timeoutMs: 90_000,
+    overallMs: 150_000,
+    staggerMs: 50_000,
     onProgress,
   });
 }

@@ -49,6 +49,18 @@ MULTI = {
     "note": "Scontrino un po' sfocato in fondo",
 }
 
+PLAN = {
+    "meals": [
+        {"slot": "s1", "title": "Caprese con mozzarella", "emoji": "🥗", "minutes": 10, "difficulty": "facile", "servings": 2,
+         "uses": [{"ref": "p1", "amount": "1"}], "missing": [{"name": "Basilico", "amount": "qualche foglia"}],
+         "steps": ["Taglia la mozzarella e i pomodori.", "Condisci con olio e sale."], "why": "Usa la mozzarella che scade oggi", "tip": ""},
+        {"slot": "s2", "title": "Pasta al pomodoro", "emoji": "🍝", "minutes": 20, "difficulty": "facile", "servings": 2,
+         "uses": [{"ref": "p2", "amount": "1"}], "missing": [],
+         "steps": ["Cuoci la pasta.", "Condisci con il sugo."], "why": "", "tip": ""},
+    ],
+    "note": "",
+}
+
 RECIPES = {
     "recipes": [
         {
@@ -118,6 +130,8 @@ def main():
             body = r.request.post_data or ""
             if "Rispondi solo: ok" in body:
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}))
+            elif '"meals"' in body:
+                r.fulfill(status=200, content_type="application/json", body=gemini_reply(PLAN))
             elif '"recipes"' in body:
                 recipe_requests.append(body)
                 if held["hold"]:
@@ -250,19 +264,26 @@ def main():
         page.wait_for_selector("text=Procedimento")
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/17-ricetta.png")
+        # Metti la ricetta nel piano dei pasti (primo pasto libero, già evidenziato).
+        page.click("text=Mettila nel piano dei pasti")
+        page.wait_for_selector("text=Quando la cucini?")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/17b-quando.png")
+        page.locator("button.slot.suggested").click()
+        page.wait_for_selector("text=Nel piano:")
+        page.wait_for_timeout(300)
         page.click("text=L’ho cucinata")
         page.wait_for_selector("text=Com’è andata?")
         page.screenshot(path=f"{SHOTS}/18-cucinata.png")
         page.click("text=Aggiorna la dispensa")
         page.wait_for_timeout(500)
 
-        # Spesa
-        page.click("nav button:has-text('Dispensa')")
-        page.wait_for_timeout(300)
-        page.click("button[aria-label='Lista della spesa']")
-        page.wait_for_selector("text=Lista della spesa")
+        # Spesa (ora è una scheda in basso)
+        page.click("nav button:has-text('Spesa')")
+        page.wait_for_selector("text=Da comprare")
         page.fill("input[placeholder^='Aggiungi:']", "pane, uova e caffè")
         page.keyboard.press("Enter")
+        page.wait_for_selector("text=Caffè")
         page.wait_for_timeout(300)
         page.locator("button.tick").first.click()
         page.wait_for_timeout(300)
@@ -272,11 +293,49 @@ def main():
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/20-spesa-in-dispensa.png")
         page.locator("button.btn-primary:has-text('Aggiungi')").click()
+        page.wait_for_timeout(500)
+
+        # Piano dei pasti
+        page.click("nav button:has-text('Pasti')")
+        page.wait_for_selector("text=Cosa mangiamo?")
+        page.wait_for_selector("text=Frittata di zucchine e mozzarella")
+        page.wait_for_timeout(400)
+        page.screenshot(path=f"{SHOTS}/24-pasti.png")
+        page.locator("button.add-meal").first.click()
+        page.wait_for_selector("input[placeholder^='Cosa cucini?']")
         page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/25-nuovo-pasto.png")
+        page.fill("input[placeholder^='Cosa cucini?']", "minestrone di verdure")
+        page.keyboard.press("Enter")
+        page.wait_for_selector("text=Minestrone di verdure")
+        page.wait_for_timeout(300)
+        page.click("text=Frittata di zucchine e mozzarella")
+        page.wait_for_selector("text=Apri la ricetta")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/26-pasto.png")
         page.click("button[aria-label='Chiudi']")
         page.wait_for_timeout(300)
+        page.evaluate("document.querySelector('main').scrollTo(0, 0)")
+        page.click("text=Riempi con l’IA")
+        page.wait_for_selector("text=Quali pasti?")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/27-programma-ia.png")
+        page.locator("button.btn-primary:has-text('Programma')").click()
+        page.wait_for_selector("text=Caprese con mozzarella")
+        page.wait_for_timeout(500)
+        page.screenshot(path=f"{SHOTS}/28-proposte-ia.png")
+        page.click("text=Metti nel piano (2)")
+        page.wait_for_selector("text=2 pasti messi nel piano")
+        page.wait_for_timeout(400)
+        page.evaluate("document.querySelector('main').scrollTo(0, 420)")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/29-pasti-pieni.png")
+        assert page.locator("text=Basilico").count() > 0, "gli ingredienti mancanti dei pasti vanno suggeriti"
 
         # Statistiche e impostazioni
+        page.click("nav button:has-text('Dispensa')")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/30-dispensa-in-tavola.png")
         page.evaluate("document.querySelector('main').scrollTo(0, 99999)")
         page.click("text=Il tuo anti-spreco")
         page.wait_for_selector("text=consumati")
@@ -295,6 +354,11 @@ def main():
         page.evaluate("document.querySelector('main').scrollTo(0, 0)")
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/23-scuro.png")
+        page.click("nav button:has-text('Pasti')")
+        page.wait_for_timeout(300)
+        page.evaluate("document.querySelector('main').scrollTo(0, 700)")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/31-pasti-scuro.png")
         browser.close()
     httpd.shutdown()
     bad = [e for e in errors if "favicon" not in e]

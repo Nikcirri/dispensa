@@ -4,4 +4,41 @@
     <string name="title_activity_main">Dispensa</string>
     <string name="package_name">com.nikcirri.dispensa</string>
     <string name="custom_url_scheme">com.nikcirri.dispensa</string>
+
+    <!-- Widget della schermata Home -->
+    <string name="widget_products_name">Dispensa: in scadenza</string>
+    <string name="widget_products_desc">I tuoi prodotti in ordine di scadenza, con il + per aggiungerne con la fotocamera.</string>
+    <string name="widget_products_title">Dispensa</string>
+    <plurals name="widget_products_urgent">
+        <item quantity="one">%d da usare subito</item>
+        <item quantity="other">%d da usare subito</item>
+    </plurals>
+    <plurals name="widget_products_total">
+        <item quantity="one">%d prodotto</item>
+        <item quantity="other">%d prodotti</item>
+    </plurals>
+    <string name="widget_products_more">e altri %d…</string>
+    <string name="widget_products_empty">Dispensa vuota: tocca + per aggiungere</string>
+    <string name="widget_add_product">Aggiungi un prodotto</string>
+    <string name="widget_badge_none">Senza data</string>
+    <string name="widget_badge_expired">Scaduto</string>
+    <string name="widget_badge_tmc_past">TMC passato</string>
+    <string name="widget_badge_today">Oggi</string>
+    <string name="widget_badge_tomorrow">Domani</string>
+    <string name="widget_badge_days">%d giorni</string>
+    <string name="widget_badge_weeks">%d sett.</string>
+    <string name="widget_badge_months">%d mesi</string>
+    <string name="widget_badge_years">%d anni</string>
+    <string name="widget_meals_name">Pasti di oggi</string>
+    <string name="widget_meals_desc">Pranzo e cena di oggi (e di domani, se lo allunghi) dal piano dei pasti.</string>
+    <string name="widget_meals_title">Pasti</string>
+    <string name="widget_meals_today">Oggi · %1$s</string>
+    <string name="widget_meals_tomorrow">Domani · %1$s</string>
+    <string name="widget_meals_lunch">☀️</string>
+    <string name="widget_meals_dinner">🌙</string>
+    <string name="widget_meals_empty">Niente in programma: tocca per aggiungere</string>
+    <string name="widget_open_meals">Apri il piano dei pasti</string>
+    <string name="widget_open_app">Apri l’app per iniziare</string>
+    <string name="widget_preview_urgent">1 da usare subito</string>
+    <string name="widget_preview_today">Oggi</string>
 </resources>

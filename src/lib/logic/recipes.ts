@@ -203,7 +203,7 @@ export const RECIPES_SCHEMA = {
   required: ['recipes', 'note'],
 } as const;
 
-function str(v: unknown, max: number): string {
+export function str(v: unknown, max: number): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
@@ -218,7 +218,8 @@ function firstPictograph(v: unknown): string {
   return m ? m[0] : '';
 }
 
-function parseRecipe(raw: unknown, refs: readonly PantryRef[], servings: number, nowIso: string): Recipe | null {
+/** Una ricetta della risposta del modello (anche dentro il piano dei pasti). */
+export function parseRecipe(raw: unknown, refs: readonly PantryRef[], servings: number, nowIso: string): Recipe | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const o = raw as Record<string, unknown>;
   const title = str(o.title, 80);

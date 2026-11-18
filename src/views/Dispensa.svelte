@@ -9,6 +9,7 @@
   import { blurOnEnter } from '../lib/ui/keyboard';
   import { flip } from 'svelte/animate';
   import { greeting } from '../lib/logic/dates';
+  import { compareMeals, dayTitle, nextSlot, plannedUses } from '../lib/logic/meals';
   import { countByLocation, filterItems, groupByUrgency, LOCATIONS, sortItems, summarize } from '../lib/logic/pantry';
   import { plural } from '../lib/logic/text';
   import { app, sheets } from '../lib/state/app.svelte';
@@ -25,7 +26,13 @@
   const summary = $derived(summarize(app.items, app.today));
   const filtered = $derived(sortItems(filterItems(app.items, view.location, view.query), view.sort));
   const sections = $derived(view.sort === 'scadenza' ? groupByUrgency(filtered, app.today) : [{ id: 'tutti', title: '', items: filtered }]);
-  const toBuy = $derived(app.shopping.filter((s) => !s.done).length);
+  // Pasti di oggi (o di domani, la sera tardi) per la riga "In tavola".
+  const nextMeals = $derived.by(() => {
+    const next = nextSlot(app.today, hour);
+    const list = app.meals.filter((m) => m.date === next.date && !m.done).sort(compareMeals);
+    return { date: next.date, list };
+  });
+  const planned = $derived(plannedUses(app.meals, app.today));
   const urgentNow = $derived(summary.urgent + summary.expired);
   const fresh = $derived(summary.total - summary.urgent - summary.expired - summary.soon);
   const hour = $derived(new Date().getHours());
@@ -36,10 +43,6 @@
     <p class="hello">{greeting(hour)}</p>
     <h1>La tua dispensa</h1>
   </div>
-  <button class="circle-btn" aria-label="Lista della spesa" onclick={() => (sheets.shopping = true)}>
-    <Icon name="cart" size={22} />
-    {#if toBuy}<span class="dot num">{toBuy > 99 ? '99+' : toBuy}</span>{/if}
-  </button>
   <button class="circle-btn" aria-label="Impostazioni" onclick={() => (sheets.settings = true)}>
     <Icon name="gear" size={22} />
   </button>
@@ -91,6 +94,17 @@
     {/if}
   </section>
 
+  {#if nextMeals.list.length}
+    <button class="card table" onclick={() => (app.tab = 'pasti')}>
+      <span class="icon-tile"><Icon name="calendar" /></span>
+      <span class="grow">
+        <strong>In tavola {dayTitle(nextMeals.date, app.today).toLowerCase()}</strong>
+        <span>{nextMeals.list.map((m) => `${m.slot === 'pranzo' ? '☀️' : '🌙'} ${m.title}`).join(' · ')}</span>
+      </span>
+      <Icon name="chevronRight" size={20} />
+    </button>
+  {/if}
+
   <label class="search">
     <Icon name="search" size={20} />
     <input type="search" placeholder="Cerca in dispensa…" bind:value={view.query} autocomplete="off" enterkeyhint="search" onkeydown={blurOnEnter} />
@@ -128,7 +142,7 @@
       <div class="cards">
         {#each s.items as it (it.id)}
           <div animate:flip={{ duration: 220 }}>
-            <ProductCard item={it} today={app.today} showLocation={view.location === 'tutto'} />
+            <ProductCard item={it} today={app.today} showLocation={view.location === 'tutto'} plannedFor={planned.get(it.id)} />
           </div>
         {/each}
       </div>
@@ -162,7 +176,7 @@
       <span class="go-text">Aggiungi il primo prodotto</span>
       <span class="go-end"><Icon name="chevronRight" size={20} /></span>
     </button>
-    <button class="btn btn-ghost btn-block" onclick={() => (sheets.shopping = true)}>
+    <button class="btn btn-ghost btn-block" onclick={() => (app.tab = 'spesa')}>
       <Icon name="cart" /> Apri la lista della spesa
     </button>
   </div>
@@ -211,6 +225,30 @@
   .cook .go-end {
     width: 42px;
     height: 42px;
+  }
+  .table {
+    margin-top: 14px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 0;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+  }
+  .table .grow {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .table .grow span {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
   }
   .search {
     margin-top: 14px;

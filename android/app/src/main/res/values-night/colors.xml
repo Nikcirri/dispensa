@@ -2,4 +2,23 @@
 <resources>
     <!-- Avvio in tema scuro: lo stesso sfondo scuro dell'app -->
     <color name="splash_background">#0B0B0B</color>
+
+    <!-- Widget nel tema scuro: grigio neutro come l'app, il verde solo sui pulsanti -->
+    <color name="widget_bg">#171717</color>
+    <color name="widget_text">#F2F2F2</color>
+    <color name="widget_muted">#A3A3A3</color>
+    <color name="widget_day">#B4E67F</color>
+    <color name="widget_accent">#9AD85A</color>
+    <color name="widget_on_accent">#132008</color>
+    <color name="widget_ripple">#33FFFFFF</color>
+    <color name="widget_red_bg">#3A1D18</color>
+    <color name="widget_red_text">#FFB4A6</color>
+    <color name="widget_amber_bg">#352A12</color>
+    <color name="widget_amber_text">#F8D68F</color>
+    <color name="widget_green_bg">#1F2A17</color>
+    <color name="widget_green_text">#B4E67F</color>
+    <color name="widget_grey_bg">#262626</color>
+    <color name="widget_grey_text">#B5B5B5</color>
+    <color name="widget_expired_bg">#FF7A5F</color>
+    <color name="widget_expired_text">#1A0A07</color>
 </resources>

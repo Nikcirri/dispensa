@@ -97,6 +97,23 @@ export function formatWeekday(key: string): string {
   return `${WEEKDAYS[d.getUTCDay()]} ${p[2]} ${MONTHS[p[1] - 1]}`;
 }
 
+/** Giorno della settimana: 0 = domenica … 6 = sabato. */
+export function weekdayIndex(key: string): number {
+  const p = parts(key);
+  if (!p) return 0;
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay();
+}
+
+/** "lunedì", "martedì"… */
+export function weekdayName(key: string): string {
+  return WEEKDAYS[weekdayIndex(key)]!;
+}
+
+/** "lun", "mar"… */
+export function weekdayShort(key: string): string {
+  return weekdayName(key).slice(0, 3);
+}
+
 /** "novembre 2026" per una chiave di mese "AAAA-MM". */
 export function formatMonth(monthKey: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(monthKey);

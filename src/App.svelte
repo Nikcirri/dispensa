@@ -5,6 +5,7 @@
   import { repeatInForeground } from './lib/foreground';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
   import { onNotificationTap } from './lib/services/notifications';
+  import { onWidgetAction } from './lib/services/widgets';
   import { app, closeAllSheets, initApp, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay } from './lib/state/ui.svelte';
@@ -17,9 +18,13 @@
 
   const TABS: { id: Tab; label: string; icon: IconName }[] = [
     { id: 'dispensa', label: 'Dispensa', icon: 'jar' },
+    { id: 'ricette', label: 'Ricette', icon: 'chef' },
     { id: 'aggiungi', label: 'Aggiungi', icon: 'camera' },
-    { id: 'ricette', label: 'Ricette IA', icon: 'chef' },
+    { id: 'pasti', label: 'Pasti', icon: 'calendar' },
+    { id: 'spesa', label: 'Spesa', icon: 'cart' },
   ];
+
+  const toBuy = $derived(app.shopping.filter((s) => !s.done).length);
 
   let main = $state<HTMLElement | null>(null);
 
@@ -42,6 +47,13 @@
           if (!app.settings.onboarded) return;
           closeAllSheets();
           app.tab = 'ricette';
+        });
+        // Toccando un widget della schermata Home si apre la scheda giusta.
+        onWidgetAction((action) => {
+          if (!app.settings.onboarded) return;
+          closeAllSheets();
+          app.tab = action;
+          main?.scrollTo({ top: 0 });
         });
         await announceNewVersion().catch(() => undefined);
         if (app.settings.onboarded) await refreshUpdate();
@@ -113,6 +125,10 @@
             <Dispensa />
           {:else if app.tab === 'aggiungi'}
             {#await load.aggiungi() then m}<m.default />{/await}
+          {:else if app.tab === 'pasti'}
+            {#await load.pasti() then m}<m.default />{/await}
+          {:else if app.tab === 'spesa'}
+            {#await load.spesa() then m}<m.default />{/await}
           {:else}
             {#await load.ricette() then m}<m.default />{/await}
           {/if}
@@ -129,7 +145,10 @@
           </button>
         {:else}
           <button class="tab" class:active={app.tab === t.id} aria-current={app.tab === t.id ? 'page' : undefined} onclick={() => selectTab(t.id)}>
-            <Icon name={t.icon} size={26} />
+            <span class="ico">
+              <Icon name={t.icon} size={26} />
+              {#if t.id === 'spesa' && toBuy}<span class="badge num" aria-label="{toBuy} da comprare">{toBuy > 99 ? '99+' : toBuy}</span>{/if}
+            </span>
             <span class="label">{t.label}</span>
           </button>
         {/if}
@@ -138,11 +157,13 @@
   </div>
 
   <!-- I fogli si caricano la prima volta che servono (di solito sono già pronti, vedi lazy.ts). -->
-  <!-- In ordine: quelli che si aprono sopra gli altri vengono dopo (la spesa apre "Metti in dispensa"). -->
-  {#if sheets.shopping}{#await load.shopping() then m}<m.default />{/await}{/if}
+  <!-- In ordine: quelli che si aprono sopra gli altri vengono dopo (un pasto apre la ricetta, la ricetta apre "Quando la cucini?"). -->
   {#if sheets.settings}{#await load.settings() then m}<m.default />{/await}{/if}
   {#if sheets.stats}{#await load.stats() then m}<m.default />{/await}{/if}
+  {#if sheets.planAi}{#await load.planAi() then m}<m.default />{/await}{/if}
+  {#if sheets.meal}{#await load.meal() then m}<m.default request={sheets.meal} />{/await}{/if}
   {#if sheets.recipe}{#await load.recipe() then m}<m.default recipe={sheets.recipe} />{/await}{/if}
+  {#if sheets.plan}{#await load.plan() then m}<m.default request={sheets.plan} />{/await}{/if}
   {#if sheets.product}{#await load.product() then m}<m.default request={sheets.product} />{/await}{/if}
   {#if sheets.multi}{#await load.multi() then m}<m.default request={sheets.multi} />{/await}{/if}
   {#if sheets.cooked}{#await load.cooked() then m}<m.default recipe={sheets.cooked} />{/await}{/if}
@@ -248,6 +269,27 @@
   .label {
     font-size: 0.8125rem;
     font-weight: 600;
+    white-space: nowrap;
+  }
+  .ico {
+    position: relative;
+    display: grid;
+  }
+  .badge {
+    position: absolute;
+    top: -6px;
+    right: -12px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--red);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--surface);
   }
   .center {
     justify-content: flex-end;

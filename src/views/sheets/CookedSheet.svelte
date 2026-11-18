@@ -7,6 +7,8 @@
   import { tapFeedback } from '../../lib/platform';
   import { removeItem, updateItem } from '../../lib/repo';
   import { app, reloadItems, sheets } from '../../lib/state/app.svelte';
+  import { changeMeal } from '../../lib/state/meals.svelte';
+  import { plannedMealOf } from '../../lib/logic/meals';
   import { showToast } from '../../lib/state/ui.svelte';
   import ExpiryBadge from '../../lib/ui/ExpiryBadge.svelte';
   import Icon from '../../lib/ui/Icon.svelte';
@@ -17,6 +19,7 @@
 
   // Dopo aver cucinato: i prodotti usati si tolgono dalla dispensa (o restano, già aperti).
   let { recipe }: { recipe: Recipe } = $props();
+  const recipeId = untrack(() => recipe).id;
 
   type Choice = 'finito' | 'resta' | 'no';
   const used: Item[] = untrack(() => recipe).uses
@@ -46,10 +49,14 @@
         }
       }
       await reloadItems();
+      // Il pasto del piano con questa ricetta (quello da cui è stata aperta, o il primo da fare) è fatto.
+      const mealId = sheets.recipeMealId ?? plannedMealOf(recipeId, app.meals, app.today)?.id;
+      if (mealId) await changeMeal(mealId, { done: true });
       void tapFeedback('medium');
       showToast(finished ? `Ottimo! ${plural(finished, 'prodotto salvato', 'prodotti salvati')} dallo spreco 🌱` : 'Dispensa aggiornata', { duration: 3500 });
       sheets.cooked = null;
       sheets.recipe = null;
+      sheets.recipeMealId = null;
     } catch (e) {
       saving = false;
       reportError(e);

@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { Meal } from './logic/meals';
 import type { Recipe } from './logic/recipes';
 import type { HistoryEntry, Item, ShoppingItem, Template } from './types';
 
@@ -15,6 +16,8 @@ export class PantryDB extends Dexie {
   templates!: EntityTable<Template, 'key'>;
   /** Ricette salvate tra i preferiti. */
   recipes!: EntityTable<Recipe, 'id'>;
+  /** Piano dei pasti (dalla versione 2 del database). */
+  meals!: EntityTable<Meal, 'id'>;
   kv!: EntityTable<KV, 'key'>;
 
   constructor(name = 'dispensa') {
@@ -27,6 +30,10 @@ export class PantryDB extends Dexie {
       templates: 'key, barcode, lastUsed',
       recipes: 'id, createdAt',
       kv: 'key',
+    });
+    // 1.2.0: piano dei pasti.
+    this.version(2).stores({
+      meals: 'id, date',
     });
   }
 }

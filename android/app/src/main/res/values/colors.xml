@@ -4,4 +4,23 @@
     <color name="ic_launcher_background">#C6EC92</color>
     <!-- Sfondo della schermata di avvio: lo stesso grigio-verde chiaro dell'app -->
     <color name="splash_background">#F1F3EE</color>
+
+    <!-- Widget della schermata Home: gli stessi colori delle schede e dei bollini dell'app (tema chiaro) -->
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_text">#161D17</color>
+    <color name="widget_muted">#6B766D</color>
+    <color name="widget_day">#3D7A1C</color>
+    <color name="widget_accent">#8CCF4D</color>
+    <color name="widget_on_accent">#132008</color>
+    <color name="widget_ripple">#26000000</color>
+    <color name="widget_red_bg">#FDE6E1</color>
+    <color name="widget_red_text">#A8291A</color>
+    <color name="widget_amber_bg">#FDF1D7</color>
+    <color name="widget_amber_text">#855400</color>
+    <color name="widget_green_bg">#E6F5D3</color>
+    <color name="widget_green_text">#3D7A1C</color>
+    <color name="widget_grey_bg">#ECEEE9</color>
+    <color name="widget_grey_text">#5D665F</color>
+    <color name="widget_expired_bg">#E5533D</color>
+    <color name="widget_expired_text">#FFFFFF</color>
 </resources>

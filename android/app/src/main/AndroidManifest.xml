@@ -30,6 +30,39 @@
 
         </activity>
 
+        <!-- Widget della schermata Home. I due "provider" ricevono solo i segnali di Android per i widget. -->
+        <receiver
+            android:name=".widgets.ProductsWidget"
+            android:exported="true"
+            android:label="@string/widget_products_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_products_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.MealsWidget"
+            android:exported="true"
+            android:label="@string/widget_meals_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_meals_info" />
+        </receiver>
+        <!-- Cambio del giorno (sveglia di mezzanotte, ora o fuso cambiati): non raggiungibile da altre app. -->
+        <receiver
+            android:name=".widgets.WidgetRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

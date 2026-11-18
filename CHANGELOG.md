@@ -1,5 +1,14 @@
 # Novità
 
+## [1.2.0] - 2026-11-18
+
+- Nuova scheda Pasti: pranzo e cena di ogni giorno. "Riempi con l'IA" usa prima ciò che scade.
+- Due widget per la schermata Home: prodotti in scadenza e pasti di oggi.
+- La lista della spesa ora è una scheda in basso, con gli ingredienti che mancano per i pasti.
+- Dalle ricette tocca 📅 per metterle in un giorno; avviso se un ingrediente scade prima del pasto.
+- In Dispensa vedi cosa c'è in tavola oggi e quali prodotti sono già in programma.
+- Cucinando una ricetta del piano il pasto si segna fatto da solo.
+
 ## [1.1.2] - 2026-11-18
 
 - Ricette: nuovo filtro "⏰ Solo in scadenza" e idee divise tra solo in scadenza, miste e altre.

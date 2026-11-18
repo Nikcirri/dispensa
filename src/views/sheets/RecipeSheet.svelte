@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
+  import { whenText } from '../../lib/logic/meals';
   import { recipeShareText, savedCount, useStatuses, type Recipe } from '../../lib/logic/recipes';
   import { tapFeedback } from '../../lib/platform';
   import { addShopping } from '../../lib/repo';
@@ -22,7 +23,11 @@
 
   function close() {
     sheets.recipe = null;
+    sheets.recipeMealId = null;
   }
+
+  // Aperta dal piano dei pasti: si vede per quale pasto è.
+  const fromMeal = $derived(sheets.recipeMealId ? app.meals.find((m) => m.id === sheets.recipeMealId) ?? null : null);
 
   async function missingToShopping() {
     try {
@@ -59,6 +64,13 @@
       </div>
     </div>
     {#if r.why}<p class="why" class:hot={saved > 0}>♻️ {r.why}</p>{/if}
+    {#if fromMeal}
+      <p class="planned"><Icon name="calendar" size={18} /> Nel piano: {whenText(fromMeal.date, fromMeal.slot, app.today)}</p>
+    {:else}
+      <button class="btn btn-soft btn-small planbtn" onclick={() => (sheets.plan = { recipe: $state.snapshot(r) as Recipe })}>
+        <Icon name="calendar" size={20} /> Mettila nel piano dei pasti
+      </button>
+    {/if}
 
     <section>
       <h3 class="section-title">Dalla tua dispensa</h3>
@@ -120,6 +132,17 @@
 </Sheet>
 
 <style>
+  .planned {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--accent-text);
+  }
+  .planbtn {
+    align-self: flex-start;
+  }
   .hero {
     display: flex;
     align-items: center;

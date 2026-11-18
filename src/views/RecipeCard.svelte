@@ -1,6 +1,6 @@
 <script lang="ts">
   import { savedCount, useStatuses, type Recipe } from '../lib/logic/recipes';
-  import { app, sheets } from '../lib/state/app.svelte';
+  import { app, openRecipe, sheets } from '../lib/state/app.svelte';
   import { isSaved, toggleSaved } from '../lib/state/recipes.svelte';
   import Icon from '../lib/ui/Icon.svelte';
 
@@ -10,10 +10,12 @@
   const saved = $derived(savedCount(statuses));
   const present = $derived(statuses.filter((s) => s.present).length);
   const liked = $derived(isSaved(recipe.id));
+  // Già nel piano dei pasti (da oggi in avanti)?
+  const planned = $derived(app.meals.some((m) => m.recipe?.id === recipe.id && m.date >= app.today));
 </script>
 
 <article class="recipe">
-  <button class="open" onclick={() => (sheets.recipe = recipe)}>
+  <button class="open" onclick={() => openRecipe(recipe)}>
     <div class="top">
       <span class="emoji" aria-hidden="true">{recipe.emoji}</span>
       <div class="titles">
@@ -50,7 +52,10 @@
     {#if recipe.why}<p class="why">{recipe.why}</p>{/if}
   </button>
   <div class="actions">
-    <button class="btn btn-soft btn-small grow" onclick={() => (sheets.recipe = recipe)}>Procedimento <Icon name="chevronRight" size={18} /></button>
+    <button class="btn btn-soft btn-small grow" onclick={() => openRecipe(recipe)}>Procedimento <Icon name="chevronRight" size={18} /></button>
+    <button class="icon-btn cal" class:on={planned} aria-label={planned ? 'Già nel piano dei pasti: mettila in un altro giorno' : 'Metti nel piano dei pasti'} onclick={() => (sheets.plan = { recipe: $state.snapshot(recipe) as Recipe })}>
+      <Icon name="calendar" />
+    </button>
     <button class="icon-btn heart" class:on={liked} aria-label={liked ? 'Togli dalle salvate' : 'Salva la ricetta'} aria-pressed={liked} onclick={() => void toggleSaved(recipe)}>
       <Icon name="heart" filled={liked} />
     </button>
@@ -192,6 +197,15 @@
   }
   .grow {
     flex: 1;
+  }
+  .cal {
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-radius: 50%;
+  }
+  .cal.on {
+    color: var(--accent-contrast);
+    background: var(--accent);
   }
   .heart {
     color: var(--text-muted);

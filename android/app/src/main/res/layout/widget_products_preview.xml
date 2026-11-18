@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Anteprima del widget "Dispensa" nell'elenco dei widget del telefono: prodotti di esempio.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:clipToOutline="true"
+    android:orientation="vertical"
+    android:paddingStart="14dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="10dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/widget_products_title"
+                android:textColor="@color/widget_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/widget_preview_urgent"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_btn_accent"
+            android:contentDescription="@string/widget_add_product"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="+"
+            android:textColor="@color/widget_on_accent"
+            android:textSize="24sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="31dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView android:layout_width="26dp" android:layout_height="wrap_content" android:includeFontPadding="false" android:text="🧀" android:textSize="16sp" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:ellipsize="end" android:maxLines="1" android:text="Mozzarella" android:textColor="@color/widget_text" android:textSize="14sp" />
+        <TextView style="@style/WidgetBadge" android:background="@drawable/widget_pill_red" android:textColor="@color/widget_red_text" android:text="Oggi" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="31dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView android:layout_width="26dp" android:layout_height="wrap_content" android:includeFontPadding="false" android:text="🥛" android:textSize="16sp" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:ellipsize="end" android:maxLines="1" android:text="Latte" android:textColor="@color/widget_text" android:textSize="14sp" />
+        <TextView style="@style/WidgetBadge" android:background="@drawable/widget_pill_amber" android:textColor="@color/widget_amber_text" android:text="3 giorni" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="31dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView android:layout_width="26dp" android:layout_height="wrap_content" android:includeFontPadding="false" android:text="🍅" android:textSize="16sp" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:ellipsize="end" android:maxLines="1" android:text="Pomodori" android:textColor="@color/widget_text" android:textSize="14sp" />
+        <TextView style="@style/WidgetBadge" android:background="@drawable/widget_pill_green" android:textColor="@color/widget_green_text" android:text="8 giorni" />
+    </LinearLayout>
+    </LinearLayout>
+
+
+</LinearLayout>

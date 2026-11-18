@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget "Dispensa": grande 3×2 quando lo aggiungi; più lo allunghi, più prodotti mostra.
+  Ogni 30 minuti Android lo fa ridisegnare: è la riserva per il cambio del giorno, se la sveglia di mezzanotte non parte.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_products_desc"
+    android:initialLayout="@layout/widget_products"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="100dp"
+    android:previewLayout="@layout/widget_products_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

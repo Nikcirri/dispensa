@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Il giorno nel widget "Pasti": "Oggi · mercoledì 18". -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/day_title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:text="Oggi · mercoledì 18"
+    android:textColor="@color/widget_day"
+    android:textSize="12sp"
+    android:textStyle="bold" />

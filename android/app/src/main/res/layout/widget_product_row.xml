@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Una riga del widget "Dispensa": icona, nome e bollino. Dei cinque bollini se ne vede uno solo. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="31dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/row_emoji"
+        android:layout_width="26dp"
+        android:layout_height="wrap_content"
+        android:includeFontPadding="false"
+        android:text="🥛"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/row_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Latte"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/badge_red"
+        style="@style/WidgetBadge"
+        android:background="@drawable/widget_pill_red"
+        android:textColor="@color/widget_red_text" />
+
+    <TextView
+        android:id="@+id/badge_amber"
+        style="@style/WidgetBadge"
+        android:background="@drawable/widget_pill_amber"
+        android:textColor="@color/widget_amber_text" />
+
+    <TextView
+        android:id="@+id/badge_green"
+        style="@style/WidgetBadge"
+        android:background="@drawable/widget_pill_green"
+        android:textColor="@color/widget_green_text" />
+
+    <TextView
+        android:id="@+id/badge_grey"
+        style="@style/WidgetBadge"
+        android:background="@drawable/widget_pill_grey"
+        android:textColor="@color/widget_grey_text" />
+
+    <TextView
+        android:id="@+id/badge_expired"
+        style="@style/WidgetBadge"
+        android:background="@drawable/widget_pill_expired"
+        android:textColor="@color/widget_expired_text" />
+</LinearLayout>

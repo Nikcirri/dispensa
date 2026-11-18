@@ -238,9 +238,16 @@ describe('impostazioni e backup', () => {
       shopping: [],
       templates: [],
       recipes: [],
+      meals: [
+        { id: 'm1', date: '2026-11-19', slot: 'cena' as const, title: 'Pasta al pesto', emoji: '🍝', recipe: null, note: '', done: false, createdAt: 'x' },
+        { id: 'm2', date: 'ieri', slot: 'cena' as const, title: 'Rovinato', emoji: '', recipe: null, note: '', done: false, createdAt: 'x' },
+      ],
     };
     const back = parseBackup(makeBackup(data, '1.0.0'));
     expect(back.items[0]!.name).toBe('Latte');
+    expect(back.meals.map((m) => m.title)).toEqual(['Pasta al pesto']);
+    // I backup delle versioni prima della 1.2.0 non hanno il piano dei pasti.
+    expect(parseBackup(JSON.stringify({ app: 'dispensa', format: 1, data: { settings: {} } })).meals).toEqual([]);
     expect(back.history).toHaveLength(1);
     expect(back.settings.onboarded).toBe(true);
     expect(() => parseBackup('{"app":"nutrizione","data":{}}')).toThrow(BackupError);
