@@ -58,6 +58,7 @@
     pull = 56;
     void tapFeedback();
     try {
+      resumeHouse();
       await Promise.all([refreshAll(), refreshUpdate().catch(() => undefined)]);
       showToast('Aggiornato ✓');
     } catch (e) {

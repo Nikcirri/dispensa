@@ -1,5 +1,13 @@
 # Novità
 
+## [1.4.0] - 2026-11-18
+
+- Nuovo: casa condivisa. Tu e chi vive con te vedete la stessa dispensa, la stessa spesa e gli stessi pasti.
+- Impostazioni → Casa condivisa: la crei una volta con Firebase (gratis), poi mandi l'invito su WhatsApp.
+- Quando qualcuno aggiunge o spunta qualcosa lo vedi in pochi secondi, con il suo nome. Funziona anche offline.
+- Chi riceve l'invito può entrare già dalla prima schermata ("Ho un invito") o inquadrando il QR.
+- Ricette salvate, statistiche e chiave di Gemini restano solo tue.
+
 ## [1.3.0] - 2026-11-18
 
 - Nuovo: fotografa lo scontrino e tutti i prodotti della spesa vanno in dispensa. Controlli solo le date.

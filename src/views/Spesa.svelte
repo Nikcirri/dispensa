@@ -16,6 +16,7 @@
   import { shareText } from '../lib/services/share';
   import { app, reloadShopping, sheets } from '../lib/state/app.svelte';
   import { startReceipt } from '../lib/state/add.svelte';
+  import { house } from '../lib/state/house.svelte';
   import { addMissingToShopping } from '../lib/state/meals.svelte';
   import { showToast, showUndoToast } from '../lib/state/ui.svelte';
   import Icon from '../lib/ui/Icon.svelte';
@@ -115,7 +116,7 @@
 
 <header class="page-top">
   <div class="grow">
-    <p class="hello">Lista della spesa</p>
+    <p class="hello">{house.joined ? '🏠 Lista della spesa condivisa' : 'Lista della spesa'}</p>
     <h1>Da comprare</h1>
   </div>
   <button class="circle-btn" aria-label="Condividi la lista" disabled={!todo.length} onclick={share}>

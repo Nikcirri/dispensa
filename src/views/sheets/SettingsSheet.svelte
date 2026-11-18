@@ -202,7 +202,13 @@
         {#if house.joined}
           <span class="title">Casa condivisa{house.members.length > 1 ? ` · ${house.members.length} persone` : ''}</span>
           <span class="sub">
-            {house.status === 'online' ? '🟢 Collegata' : house.status === 'error' ? '🔴 Qualcosa non va: tocca per vedere' : '🟡 In attesa di internet'}
+            {house.status === 'online'
+              ? '🟢 Collegata'
+              : house.status === 'error'
+                ? '🔴 Qualcosa non va: tocca per vedere'
+                : house.status === 'connecting'
+                  ? '🟡 Mi collego…'
+                  : '🟡 In attesa di internet'}
           </span>
         {:else}
           <span class="title">Condividi con chi vive con te</span>
