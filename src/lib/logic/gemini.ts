@@ -14,6 +14,61 @@ export function extractJson(text: string): unknown {
   }
 }
 
+/** Fine dell'oggetto o della lista che inizia a `start` (parentesi bilanciate, stringhe saltate); -1 se è troncato. */
+function closingIndex(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === '\\') i++;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Gli oggetti completi di una lista nella risposta, anche se la risposta è stata tagliata a metà
+ * o è una lista "nuda" ([...]) invece di un oggetto. Con `key` si cerca la lista con quel nome
+ * (es. "meals"); senza, la prima lista che si trova.
+ */
+export function salvageList(text: string, key?: string): unknown[] {
+  let from = 0;
+  if (key) {
+    const k = text.indexOf(`"${key}"`);
+    if (k < 0) return [];
+    from = k;
+  }
+  const open = text.indexOf('[', from);
+  if (open < 0) return [];
+  const out: unknown[] = [];
+  let i = open + 1;
+  while (i < text.length) {
+    const next = text.indexOf('{', i);
+    if (next < 0) break;
+    // Una "]" prima del prossimo oggetto chiude la lista.
+    const close = text.indexOf(']', i);
+    if (close >= 0 && close < next && !text.slice(i, close).includes('"')) break;
+    const end = closingIndex(text, next);
+    if (end < 0) break;
+    try {
+      out.push(JSON.parse(text.slice(next, end + 1)));
+    } catch {
+      // Oggetto rovinato: si salta.
+    }
+    i = end + 1;
+  }
+  return out;
+}
+
 
 /** Per ogni modello, fino a quando non usarlo (millisecondi), dopo un limite raggiunto o se non esiste. */
 export type ModelPauses = Record<string, number>;
@@ -432,7 +487,8 @@ export function progressHeadline(p: AiProgress | null): string {
   if (running.length >= 2) return `${modelLabel(running[0]!.model)} ci mette un po’: chiedo anche a ${modelLabel(running[running.length - 1]!.model)}`;
   if (first && failed.length) {
     const f = failed[failed.length - 1]!;
-    return `${modelLabel(f.model)}: ${OUTCOME_TEXT[f.status as AttemptOutcome]}. Provo con ${modelLabel(first.model)}`;
+    const again = f.model === first.model ? 'Riprovo' : `Provo con ${modelLabel(first.model)}`;
+    return `${modelLabel(f.model)}: ${OUTCOME_TEXT[f.status as AttemptOutcome]}. ${again}`;
   }
   if (first) return `Gemini ${modelLabel(first.model)} sta lavorando`;
   return 'Quasi fatto…';

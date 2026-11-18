@@ -52,6 +52,18 @@ export type MealRequest = { mode: 'new'; date: string; slot: MealSlot } | { mode
 /** Scegliere giorno e pasto: per mettere una ricetta nel piano o spostare un pasto. */
 export type PlanRequest = { recipe: Recipe } | { mealId: string };
 
+/** "Com'è andata?": aggiornare la dispensa dopo aver cucinato una ricetta o un pasto del piano. */
+export interface CookedRequest {
+  /** La ricetta (null per un pasto scritto a mano senza ingredienti). */
+  recipe: Recipe | null;
+  title: string;
+  /** Il pasto del piano da segnare fatto. */
+  mealId: string | null;
+}
+
+/** Scrivere una ricetta propria, modificarne una, o scegliere gli ingredienti di un pasto del piano. */
+export type EditRecipeRequest = { mode: 'new' } | { mode: 'edit'; recipe: Recipe } | { mode: 'meal'; mealId: string };
+
 export interface ProductRequest {
   /** `new`: prodotto nuovo; `edit`: modifica di uno in dispensa. */
   mode: 'new' | 'edit';
@@ -74,7 +86,8 @@ export const sheets = $state({
   recipe: null as Recipe | null,
   /** Il pasto del piano da cui è stata aperta la ricetta (con "L'ho cucinata" si segna fatto). */
   recipeMealId: null as string | null,
-  cooked: null as Recipe | null,
+  cooked: null as CookedRequest | null,
+  editRecipe: null as EditRecipeRequest | null,
   meal: null as MealRequest | null,
   plan: null as PlanRequest | null,
   planAi: false,
@@ -90,6 +103,7 @@ export function closeAllSheets(): void {
   sheets.recipe = null;
   sheets.recipeMealId = null;
   sheets.cooked = null;
+  sheets.editRecipe = null;
   sheets.meal = null;
   sheets.plan = null;
   sheets.planAi = false;
@@ -104,6 +118,7 @@ export function anySheetOpen(): boolean {
     sheets.aiKey ||
     sheets.recipe ||
     sheets.cooked ||
+    sheets.editRecipe ||
     sheets.meal ||
     sheets.plan ||
     sheets.planAi

@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Programma con l'IA": l'IA propone una ricetta per ogni pasto libero dei prossimi giorni,
   // mettendo i prodotti che scadono prima nei pasti più vicini. Si sceglie cosa tenere e si mette nel piano.
+  import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { usedModelText } from '../../lib/logic/gemini';
   import { whenText, type MealSlot } from '../../lib/logic/meals';
@@ -9,7 +10,7 @@
   import { tapFeedback } from '../../lib/platform';
   import { app, openRecipe, sheets } from '../../lib/state/app.svelte';
   import { acceptPlan, generatePlan, planAi, planTargets } from '../../lib/state/meals.svelte';
-  import { recipes, rememberFilters } from '../../lib/state/recipes.svelte';
+  import { loadRecipes, recipes, rememberFilters } from '../../lib/state/recipes.svelte';
   import { showToast } from '../../lib/state/ui.svelte';
   import AiStatus from '../../lib/ui/AiStatus.svelte';
   import Icon from '../../lib/ui/Icon.svelte';
@@ -25,6 +26,11 @@
   // Ricalcolati quando cambiano le scelte o il piano.
   const targets = $derived(planTargets());
   const chosen = $derived(planAi.proposals.filter((p) => p.keep).length);
+
+  // Persone, vegetariano e senza lattosio come nelle Ricette (anche se la scheda Ricette non è ancora stata aperta).
+  onMount(() => {
+    void loadRecipes().catch(() => undefined);
+  });
   let saving = $state(false);
 
   function close() {
@@ -112,7 +118,7 @@
       {/if}
     {:else}
       {#if planAi.note}<p class="ai-note">💬 {planAi.note}</p>{/if}
-      <p class="lead">Togli la spunta a quello che non ti piace, poi metti il resto nel piano.</p>
+      <p class="lead">Togli la spunta a quello che non ti piace, poi metti il resto nel piano. Il procedimento si scrive quando apri il piatto.</p>
       <ul class="props">
         {#each planAi.proposals as p, i (p.slot.code)}
           <li in:fly={{ y: 12, duration: 220, delay: i * 50 }} class:off={!p.keep}>

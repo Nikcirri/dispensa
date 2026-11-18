@@ -2,7 +2,18 @@
 import { todayKey } from '../logic/dates';
 import type { AiProgress } from '../logic/gemini';
 import { buildPlanPrompt, parsePlan, PLAN_SCHEMA, type PlanOptions, type PlanResult, type PlanSlot } from '../logic/plan';
-import { buildRecipePrompt, parseRecipes, RECIPES_SCHEMA, type RecipeFilters, type RecipeResult } from '../logic/recipes';
+import {
+  buildRecipePrompt,
+  buildStepsPrompt,
+  parseRecipes,
+  parseSteps,
+  RECIPES_SCHEMA,
+  STEPS_SCHEMA,
+  type Recipe,
+  type RecipeFilters,
+  type RecipeResult,
+  type StepsResult,
+} from '../logic/recipes';
 import { buildScanPrompt, parseScan, SCAN_SCHEMA, type ScanMode, type ScanResult } from '../logic/scan';
 import type { Item } from '../types';
 import { runGemini, type GeminiResult } from './gemini';
@@ -68,11 +79,27 @@ export async function planMeals(
     schema: PLAN_SCHEMA,
     parse: (text) => parsePlan(text, refs, slots, options.servings, new Date().toISOString()),
     isEmpty: (r) => r.proposals.length === 0,
-    // Tanti pasti = risposta lunga: più tempo che per 3 ricette.
-    fullTimeoutMs: 80_000,
-    timeoutMs: 90_000,
-    overallMs: 150_000,
-    staggerMs: 50_000,
+    // Risposta corta (senza procedimento): tempi poco più larghi di quelli delle ricette.
+    fullTimeoutMs: 50_000,
+    timeoutMs: 60_000,
+    overallMs: 120_000,
+    staggerMs: 25_000,
+    onProgress,
+  });
+}
+
+/** Il procedimento di un piatto che non ce l'ha ancora (piatti del piano, ricette scritte senza). */
+export async function writeSteps(key: string, recipe: Recipe, onProgress?: (p: AiProgress) => void): Promise<GeminiResult<StepsResult>> {
+  return runGemini(key, {
+    prompt: buildStepsPrompt(recipe),
+    image: null,
+    schema: STEPS_SCHEMA,
+    parse: parseSteps,
+    isEmpty: (r) => r.steps.length === 0,
+    fullTimeoutMs: 30_000,
+    timeoutMs: 40_000,
+    overallMs: 75_000,
+    staggerMs: 15_000,
     onProgress,
   });
 }

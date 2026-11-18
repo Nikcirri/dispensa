@@ -236,14 +236,28 @@ export function warningText(w: MealWarning, today: string): string {
   return `${w.name} ${when}`;
 }
 
-/** Per ogni prodotto, il primo pasto in programma che lo usa (da oggi in avanti). */
-export function plannedUses(meals: readonly Meal[], today: string): Map<string, Meal> {
-  const map = new Map<string, Meal>();
+/** Per ogni prodotto, i pasti ancora da fare che lo usano (da oggi in avanti, il più vicino per primo). */
+export function plannedUses(meals: readonly Meal[], today: string): Map<string, Meal[]> {
+  const map = new Map<string, Meal[]>();
   for (const m of [...meals].sort(compareMeals)) {
     if (m.done || m.date < today || !m.recipe) continue;
-    for (const u of m.recipe.uses) if (u.itemId && !map.has(u.itemId)) map.set(u.itemId, m);
+    for (const u of m.recipe.uses) {
+      if (!u.itemId) continue;
+      const list = map.get(u.itemId);
+      if (list) {
+        if (!list.includes(m)) list.push(m);
+      } else map.set(u.itemId, [m]);
+    }
   }
   return map;
+}
+
+/** "In programma: cena di venerdì 20" (+ quanti altri pasti lo usano). */
+export function plannedText(meals: readonly Meal[], today: string): string {
+  const first = meals[0];
+  if (!first) return '';
+  const more = meals.length - 1;
+  return `In programma: ${whenText(first.date, first.slot, today)}${more > 0 ? ` (+${more})` : ''}`;
 }
 
 /** Il pasto ancora da fare con questa ricetta (da ieri in avanti, il più vicino): cucinandola diventa fatto. */

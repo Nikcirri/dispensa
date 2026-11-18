@@ -25,6 +25,7 @@
           <span>· {recipe.difficulty}</span>
           <span>· <Icon name="users" size={16} /> {recipe.servings}</span>
         </p>
+        {#if recipe.source === 'utente'}<span class="mine">✍️ Ricetta tua</span>{/if}
       </div>
     </div>
 
@@ -46,7 +47,7 @@
 
     {#if recipe.missing.length}
       <p class="missing"><strong>Ti manca:</strong> {recipe.missing.map((m) => m.name + (m.amount ? ` (${m.amount})` : '')).join(', ')}</p>
-    {:else}
+    {:else if recipe.uses.length}
       <p class="missing ok">✓ Hai già tutto in casa</p>
     {/if}
     {#if recipe.why}<p class="why">{recipe.why}</p>{/if}
@@ -188,6 +189,16 @@
     font-size: 0.9375rem;
     font-style: italic;
     color: var(--text-muted);
+  }
+  .mine {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-size: 0.8125rem;
+    font-weight: 700;
   }
   .actions {
     display: flex;

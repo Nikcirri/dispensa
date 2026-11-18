@@ -5,7 +5,7 @@ import { daysLeft, effectiveExpiry, urgencyOf, type Urgency } from './expiry';
 import { formatQuantity } from './foods';
 import { extractJson } from './gemini';
 import { sortItems } from './pantry';
-import { newId } from './text';
+import { capitalize, newId } from './text';
 
 export interface RecipeFilters {
   /** ⏱️ meno di 20 minuti */
@@ -67,6 +67,8 @@ export interface Recipe {
   why: string;
   tip: string;
   createdAt: string;
+  /** "utente": scritta da chi usa l'app (si può modificare). Senza: proposta dall'IA. */
+  source?: 'utente';
 }
 
 /** Riferimento breve ("p1") a un prodotto mandato all'IA. */
@@ -218,13 +220,28 @@ function firstPictograph(v: unknown): string {
   return m ? m[0] : '';
 }
 
-/** Una ricetta della risposta del modello (anche dentro il piano dei pasti). */
-export function parseRecipe(raw: unknown, refs: readonly PantryRef[], servings: number, nowIso: string): Recipe | null {
+/** "Pasta alla Carbonara dellaDispensa" → "Pasta alla Carbonara della Dispensa" (parole attaccate dal modello). */
+export function fixTitle(t: string): string {
+  return t.replace(/([a-zà-ÿ])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+}
+
+function parseStepList(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((s) => str(s, 400).replace(/^\d+[.)]\s*/, '')).filter(Boolean).slice(0, 12) : [];
+}
+
+/** Una ricetta della risposta del modello (anche dentro il piano dei pasti, dove il procedimento arriva dopo). */
+export function parseRecipe(
+  raw: unknown,
+  refs: readonly PantryRef[],
+  servings: number,
+  nowIso: string,
+  opts: { requireSteps?: boolean } = {},
+): Recipe | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const o = raw as Record<string, unknown>;
-  const title = str(o.title, 80);
-  const steps = Array.isArray(o.steps) ? o.steps.map((s) => str(s, 400).replace(/^\d+[.)]\s*/, '')).filter(Boolean).slice(0, 12) : [];
-  if (!title || !steps.length) return null;
+  const title = fixTitle(str(o.title, 80));
+  const steps = parseStepList(o.steps);
+  if (!title || (opts.requireSteps !== false && !steps.length)) return null;
   const seen = new Set<string>();
   const uses: RecipeUse[] = [];
   for (const u of Array.isArray(o.uses) ? o.uses : []) {
@@ -302,7 +319,126 @@ export function sanitizeRecipe(v: unknown): Recipe | null {
     why: typeof o.why === 'string' ? o.why : '',
     tip: typeof o.tip === 'string' ? o.tip : '',
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date(0).toISOString(),
+    ...(o.source === 'utente' ? { source: 'utente' as const } : {}),
   };
+}
+
+// ---------- Procedimento scritto dopo (piatti del piano e ricette scritte senza) ----------
+
+export function buildStepsPrompt(recipe: Recipe): string {
+  const ingredients = [
+    ...recipe.uses.map((u) => `- ${u.name}${u.amount ? `: ${u.amount}` : ''}`),
+    ...recipe.missing.map((m) => `- ${m.name}${m.amount ? `: ${m.amount}` : ''}`),
+  ];
+  return [
+    'Sei uno chef italiano di cucina casalinga.',
+    `Scrivi il procedimento di questo piatto: «${recipe.title}», per ${recipe.servings} ${recipe.servings === 1 ? 'persona' : 'persone'}.`,
+    ingredients.length ? 'Ingredienti:' : '',
+    ...ingredients,
+    'Regole:',
+    '- "steps": il procedimento in 3–8 passaggi brevi e chiari, con tempi e temperature. Usa gli ingredienti dell’elenco (sale, olio, pepe e acqua si possono aggiungere).',
+    '- "minutes": tempo totale realistico.',
+    '- "tip": un consiglio breve (varianti o come conservare gli avanzi), anche "".',
+    'Rispondi SOLO con JSON valido, senza testo prima o dopo, con questa forma:',
+    '{"steps":["..."],"minutes":20,"tip":"..."}',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+export const STEPS_SCHEMA = {
+  type: 'object',
+  properties: {
+    steps: { type: 'array', items: STR, minItems: 1, maxItems: 12 },
+    minutes: { type: 'number' },
+    tip: STR,
+  },
+  required: ['steps', 'minutes', 'tip'],
+} as const;
+
+export interface StepsResult {
+  steps: string[];
+  minutes: number | null;
+  tip: string;
+}
+
+export function parseSteps(text: string): StepsResult | null {
+  const json = extractJson(text);
+  if (typeof json !== 'object' || json === null) {
+    // A volte arriva solo la lista dei passaggi.
+    const list = salvageStrings(text);
+    return list.length ? { steps: list, minutes: null, tip: '' } : null;
+  }
+  const o = json as Record<string, unknown>;
+  const steps = parseStepList(o.steps);
+  if (!steps.length) return null;
+  const minutes = num(o.minutes);
+  return { steps, minutes: minutes !== null && minutes > 0 && minutes <= 600 ? Math.round(minutes) : null, tip: str(o.tip, 300) };
+}
+
+function salvageStrings(text: string): string[] {
+  const t = text.trim();
+  if (!t.startsWith('[')) return [];
+  try {
+    return parseStepList(JSON.parse(t) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+/** La ricetta con il procedimento appena scritto. */
+export function withSteps(recipe: Recipe, r: StepsResult): Recipe {
+  return { ...recipe, steps: r.steps, tip: r.tip || recipe.tip, minutes: r.minutes ?? recipe.minutes };
+}
+
+// ---------- Ricette scritte da chi usa l'app ----------
+
+/** Un passaggio per riga ("1. Cuoci la pasta" → "Cuoci la pasta"). */
+export function stepsFromText(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .map((l) => l.trim().replace(/^(\d+[.)]|[-•*])\s*/, '').slice(0, 400))
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+export interface UserRecipeFields {
+  id?: string;
+  title: string;
+  emoji: string;
+  servings: number;
+  minutes: number;
+  uses: RecipeUse[];
+  missing: MissingIngredient[];
+  steps: string[];
+  createdAt?: string;
+}
+
+export function buildUserRecipe(f: UserRecipeFields, nowIso: string): Recipe {
+  return {
+    id: f.id ?? newId(),
+    title: capitalize(fixTitle(f.title.slice(0, 80))) || 'Ricetta',
+    emoji: f.emoji || '🍽️',
+    minutes: Math.min(600, Math.max(1, Math.round(f.minutes || 30))),
+    difficulty: 'facile',
+    servings: Math.min(20, Math.max(1, Math.round(f.servings || 2))),
+    uses: f.uses.map((u) => ({ ...u, amount: u.amount.trim().slice(0, 40) })),
+    missing: f.missing.filter((m) => m.name.trim()).map((m) => ({ name: m.name.trim().slice(0, 60), amount: m.amount.trim().slice(0, 40) })),
+    steps: f.steps,
+    why: '',
+    tip: '',
+    createdAt: f.createdAt ?? nowIso,
+    source: 'utente',
+  };
+}
+
+/** Quanti ne restano dopo averne usati (solo per pezzi e confezioni, se la quantità usata è un numero chiaro). */
+export function leftoverAfter(item: Pick<Item, 'quantity' | 'unit'>, amount: string): number | null {
+  if (item.unit !== 'pz' && item.unit !== 'conf') return null;
+  const m = /^\s*(\d+)(?![\d.,])(?!\s*(?:g|gr|kg|ml|cl|l)\b)/i.exec(amount);
+  if (!m) return null;
+  const used = Number(m[1]);
+  return used > 0 && used < item.quantity ? item.quantity - used : null;
 }
 
 export interface UseStatus extends RecipeUse {

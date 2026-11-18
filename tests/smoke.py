@@ -49,17 +49,18 @@ MULTI = {
     "note": "Scontrino un po' sfocato in fondo",
 }
 
+# Piano dell'IA: piatti senza procedimento (si scrive dopo, quando si apre il piatto).
 PLAN = {
     "meals": [
-        {"slot": "s1", "title": "Caprese con mozzarella", "emoji": "🥗", "minutes": 10, "difficulty": "facile", "servings": 2,
-         "uses": [{"ref": "p1", "amount": "1"}], "missing": [{"name": "Basilico", "amount": "qualche foglia"}],
-         "steps": ["Taglia la mozzarella e i pomodori.", "Condisci con olio e sale."], "why": "Usa la mozzarella che scade oggi", "tip": ""},
-        {"slot": "s2", "title": "Pasta al pomodoro", "emoji": "🍝", "minutes": 20, "difficulty": "facile", "servings": 2,
-         "uses": [{"ref": "p2", "amount": "1"}], "missing": [],
-         "steps": ["Cuoci la pasta.", "Condisci con il sugo."], "why": "", "tip": ""},
+        {"slot": "s1", "title": "Caprese con mozzarella", "emoji": "🥗", "minutes": 10, "difficulty": "facile",
+         "uses": [{"ref": "p1", "amount": "1"}], "missing": [{"name": "Basilico", "amount": "qualche foglia"}], "why": "Usa la mozzarella che scade oggi"},
+        {"slot": "s2", "title": "Pasta al pomodoro", "emoji": "🍝", "minutes": 20, "difficulty": "facile",
+         "uses": [{"ref": "p2", "amount": "1"}], "missing": [], "why": ""},
     ],
     "note": "",
 }
+
+STEPS = {"steps": ["Taglia la mozzarella a fette.", "Alterna con il pomodoro e condisci con olio e sale."], "minutes": 10, "tip": "Ottima anche con l'origano."}
 
 RECIPES = {
     "recipes": [
@@ -132,6 +133,8 @@ def main():
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}))
             elif '"meals"' in body:
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(PLAN))
+            elif "Scrivi il procedimento" in body:
+                r.fulfill(status=200, content_type="application/json", body=gemini_reply(STEPS))
             elif '"recipes"' in body:
                 recipe_requests.append(body)
                 if held["hold"]:
@@ -309,6 +312,27 @@ def main():
         page.keyboard.press("Enter")
         page.wait_for_selector("text=Minestrone di verdure")
         page.wait_for_timeout(300)
+        # Piatto scritto a mano: si scelgono gli ingredienti (dalla dispensa e da comprare).
+        page.click("text=Minestrone di verdure")
+        page.click("text=Scegli gli ingredienti")
+        page.wait_for_selector("text=Ingredienti del piatto")
+        page.click("text=Aggiungi dalla dispensa")
+        page.wait_for_selector("input[placeholder='Cerca in dispensa…']")
+        page.fill("input[placeholder='Cerca in dispensa…']", "latte")
+        page.locator(".picker li button").first.click()
+        page.fill("input[placeholder='Es. basilico, panna']", "sedano, carote")
+        page.keyboard.press("Enter")
+        page.wait_for_selector("text=Carote")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/25b-ingredienti.png")
+        page.locator("button.btn-primary:has-text('Salva')").click()
+        page.wait_for_selector("text=Li metto nella lista della spesa?")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/25c-spesa-ingredienti.png")
+        page.click("text=Sì, aggiungi")
+        page.wait_for_selector("text=2 ingredienti aggiunti alla spesa")
+        page.click("button[aria-label='Chiudi']")
+        page.wait_for_timeout(300)
         page.click("text=Frittata di zucchine e mozzarella")
         page.wait_for_selector("text=Apri la ricetta")
         page.wait_for_timeout(300)
@@ -331,11 +355,50 @@ def main():
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/29-pasti-pieni.png")
         assert page.locator("text=Basilico").count() > 0, "gli ingredienti mancanti dei pasti vanno suggeriti"
+        # Il piatto del piano arriva senza procedimento: lo scrive l'IA quando si apre.
+        page.locator(".meal-main:has-text('Caprese con mozzarella')").click()
+        page.click("text=Apri la ricetta")
+        page.wait_for_selector("text=Scrivi il procedimento con l’IA")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/29b-senza-procedimento.png")
+        page.click("text=Scrivi il procedimento con l’IA")
+        page.wait_for_selector("text=Taglia la mozzarella a fette.")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/29c-procedimento.png")
+        page.locator("button[aria-label='Chiudi']").last.click()
+        page.wait_for_timeout(300)
+        page.locator("button[aria-label='Chiudi']").last.click()
+        page.wait_for_timeout(300)
+        # Il pallino accanto al piatto: "Com'è andata?" con gli ingredienti, poi la dispensa si aggiorna.
+        page.locator("button.tick[aria-label='Cucinato: Caprese con mozzarella']").click()
+        page.wait_for_selector("text=Com’è andata?")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/29d-cucinato.png")
+        page.click("text=Aggiorna la dispensa")
+        page.wait_for_selector("button.tick.on[aria-label='Da fare: Caprese con mozzarella']")
+        page.wait_for_timeout(300)
+
+        # Ricetta scritta da te tra le salvate
+        page.click("nav button:has-text('Ricette')")
+        page.click("button[aria-label='Ricette salvate e tue']")
+        page.click("text=Nuova ricetta tua")
+        page.wait_for_selector("text=Nuova ricetta")
+        page.fill("input[placeholder='Es. Pasta al tonno']", "torta di mele della nonna")
+        page.fill("textarea.steps", "Sbatti le uova con lo zucchero\nAggiungi farina e mele\nInforna a 180 °C per 40 minuti")
+        page.locator("button.btn-primary:has-text('Salva')").click()
+        page.wait_for_selector("text=Torta di mele della nonna")
+        page.wait_for_timeout(400)
+        page.screenshot(path=f"{SHOTS}/29e-ricetta-tua.png")
 
         # Statistiche e impostazioni
         page.click("nav button:has-text('Dispensa')")
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/30-dispensa-in-tavola.png")
+        assert page.locator("text=In programma:").count() > 0, "i prodotti dei pasti in programma vanno segnati in dispensa"
+        page.locator("text=In programma:").first.scroll_into_view_if_needed()
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/30b-in-programma.png")
+        page.evaluate("document.querySelector('main').scrollTo(0, 0)")
         page.evaluate("document.querySelector('main').scrollTo(0, 99999)")
         page.click("text=Il tuo anti-spreco")
         page.wait_for_selector("text=consumati")

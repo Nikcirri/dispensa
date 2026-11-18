@@ -109,12 +109,10 @@
     <p class="hello">Svuota-frigo con l’IA</p>
     <h1>Cosa cucino?</h1>
   </div>
-  {#if recipes.saved.length}
-    <div class="segmented views">
-      <button aria-pressed={recipes.view === 'nuove'} onclick={() => (recipes.view = 'nuove')}>Idee</button>
-      <button aria-pressed={recipes.view === 'salvate'} onclick={() => (recipes.view = 'salvate')}>❤️ {recipes.saved.length}</button>
-    </div>
-  {/if}
+  <div class="segmented views">
+    <button aria-pressed={recipes.view === 'nuove'} onclick={() => (recipes.view = 'nuove')}>Idee</button>
+    <button aria-pressed={recipes.view === 'salvate'} aria-label="Ricette salvate e tue" onclick={() => (recipes.view = 'salvate')}>❤️ {recipes.saved.length}</button>
+  </div>
 </header>
 
 {#if recipes.view === 'nuove'}
@@ -201,6 +199,10 @@
   {/if}
 {/if}
 
+{#if recipes.view === 'salvate'}
+  <button class="btn btn-soft btn-block newrec" onclick={() => (sheets.editRecipe = { mode: 'new' })}><Icon name="plus" /> Nuova ricetta tua</button>
+{/if}
+
 {#if !recipes.loading && list.length}
   <div bind:this={resultsEl} class="anchor"></div>
   {#if recipes.view === 'nuove'}
@@ -244,10 +246,13 @@
     <button class="btn btn-block more" onclick={() => void generateRecipes(true)}><Icon name="refresh" /> Altre idee</button>
   {/if}
 {:else if recipes.view === 'salvate'}
-  <p class="empty">Nessuna ricetta salvata.</p>
+  <p class="empty">Qui trovi le ricette salvate col ❤️ e quelle scritte da te.</p>
 {/if}
 
 <style>
+  .newrec {
+    margin-bottom: 14px;
+  }
   .views {
     flex: none;
   }

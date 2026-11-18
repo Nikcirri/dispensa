@@ -2,24 +2,36 @@
   import { untrack } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
-  import { whenText } from '../../lib/logic/meals';
+  import { plannedMealOf, whenText } from '../../lib/logic/meals';
   import { recipeShareText, savedCount, useStatuses, type Recipe } from '../../lib/logic/recipes';
+  import { recipeWaitingMessage } from '../../lib/logic/recipes';
   import { tapFeedback } from '../../lib/platform';
   import { addShopping } from '../../lib/repo';
   import { shareText } from '../../lib/services/share';
-  import { app, reloadShopping, sheets } from '../../lib/state/app.svelte';
-  import { isSaved, toggleSaved } from '../../lib/state/recipes.svelte';
+  import { app, hasAiKey, reloadShopping, sheets } from '../../lib/state/app.svelte';
+  import { generateSteps, isSaved, stepsAi, toggleSaved } from '../../lib/state/recipes.svelte';
+  import AiStatus from '../../lib/ui/AiStatus.svelte';
   import { showToast } from '../../lib/state/ui.svelte';
   import Icon from '../../lib/ui/Icon.svelte';
   import Sheet from '../../lib/ui/Sheet.svelte';
 
   let { recipe }: { recipe: Recipe } = $props();
-  const r = untrack(() => recipe);
+  // La ricetta può cambiare mentre il foglio è aperto (procedimento scritto dall'IA, modifica):
+  // si segue, ma si tiene l'ultima quando il foglio si chiude (allora diventa null).
+  let current = $state(untrack(() => recipe));
+  $effect(() => {
+    if (recipe) current = recipe;
+  });
+  const r = $derived(current);
 
   const statuses = $derived(useStatuses(r, app.items, app.today));
   const saved = $derived(savedCount(statuses));
   const liked = $derived(isSaved(r.id));
-  let doneSteps = $state<boolean[]>(r.steps.map(() => false));
+  let doneSteps = $state<boolean[]>(untrack(() => recipe).steps.map(() => false));
+  $effect(() => {
+    if (doneSteps.length !== r.steps.length) doneSteps = r.steps.map(() => false);
+  });
+  const writing = $derived(stepsAi.recipeId === r.id);
 
   function close() {
     sheets.recipe = null;
@@ -49,7 +61,12 @@
   }
 
   function cooked() {
-    sheets.cooked = r;
+    const mealId = sheets.recipeMealId ?? plannedMealOf(r.id, app.meals, app.today)?.id ?? null;
+    sheets.cooked = { recipe: $state.snapshot(r) as Recipe, title: r.title, mealId };
+  }
+
+  function edit() {
+    sheets.editRecipe = { mode: 'edit', recipe: $state.snapshot(r) as Recipe };
   }
 </script>
 
@@ -72,6 +89,7 @@
       </button>
     {/if}
 
+    {#if statuses.length}
     <section>
       <h3 class="section-title">Dalla tua dispensa</h3>
       <ul class="ing">
@@ -86,6 +104,7 @@
       </ul>
       {#if statuses.some((s) => !s.present)}<p class="note">I prodotti barrati non sono più in dispensa.</p>{/if}
     </section>
+    {/if}
 
     {#if r.missing.length}
       <section>
@@ -105,6 +124,24 @@
 
     <section>
       <h3 class="section-title">Procedimento</h3>
+      {#if !r.steps.length}
+        {#if writing}
+          <AiStatus progress={stepsAi.progress} message={recipeWaitingMessage(stepsAi.seconds)} />
+        {:else}
+          <p class="note nosteps">
+            {r.source === 'utente' ? 'Non hai scritto il procedimento.' : 'Il procedimento non c’è ancora: i piatti del piano arrivano senza, per fare prima.'}
+          </p>
+          {#if stepsAi.error}
+            <div class="card error" role="alert">
+              <p>{stepsAi.error}</p>
+              {#if stepsAi.detail}<p class="detail">{stepsAi.detail}</p>{/if}
+            </div>
+          {/if}
+          {#if hasAiKey()}
+            <button class="btn btn-soft writebtn" onclick={() => void generateSteps(r)}><Icon name="sparkles" size={20} /> Scrivi il procedimento con l’IA</button>
+          {/if}
+        {/if}
+      {/if}
       <ol class="steps">
         {#each r.steps as step, i (i)}
           <li>
@@ -115,7 +152,7 @@
           </li>
         {/each}
       </ol>
-      <p class="note">Tocca un passaggio quando l’hai fatto.</p>
+      {#if r.steps.length}<p class="note">Tocca un passaggio quando l’hai fatto.</p>{/if}
     </section>
 
     {#if r.tip}<p class="tip">💡 {r.tip}</p>{/if}
@@ -123,6 +160,7 @@
     <div class="side-actions">
       <button class="btn btn-small" onclick={() => void toggleSaved(r)}><Icon name="heart" filled={liked} size={20} /> {liked ? 'Salvata' : 'Salva'}</button>
       <button class="btn btn-small" onclick={share}><Icon name="share" size={20} /> Condividi</button>
+      <button class="btn btn-small" onclick={edit}><Icon name="edit" size={20} /> Modifica</button>
     </div>
   </div>
 
@@ -132,6 +170,20 @@
 </Sheet>
 
 <style>
+  .nosteps {
+    margin: 0 0 10px;
+  }
+  .writebtn {
+    align-self: flex-start;
+  }
+  .error p {
+    margin: 0;
+  }
+  .error .detail {
+    margin-top: 6px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+  }
   .planned {
     margin: 0;
     display: inline-flex;
@@ -295,9 +347,10 @@
   }
   .side-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .side-actions .btn {
-    flex: 1;
+    flex: 1 1 auto;
   }
 </style>

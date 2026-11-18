@@ -11,6 +11,7 @@ import {
   mealWarnings,
   nextSlot,
   plannedMealOf,
+  plannedText,
   plannedUses,
   shoppingForMeals,
   urgentNotPlanned,
@@ -24,7 +25,7 @@ import {
   whenText,
   widgetMeals,
 } from './meals';
-import { buildPlanPrompt, parsePlan, planSlots, PLAN_SCHEMA } from './plan';
+import { buildPlanPrompt, parsePlan, planSlots, PLAN_SCHEMA, slotCode } from './plan';
 import type { Recipe } from './recipes';
 import { widgetData } from './widget';
 
@@ -135,7 +136,8 @@ describe('piano dei pasti: dispensa e spesa', () => {
   });
 
   it('prodotti già nel piano e quelli urgenti ancora senza pasto', () => {
-    expect(plannedUses([friday], TODAY).get('mozz')?.title).toBe('Parmigiana');
+    expect(plannedUses([friday], TODAY).get('mozz')?.[0]?.title).toBe('Parmigiana');
+    expect(plannedText(plannedUses([friday, { ...friday, id: 'b', date: '2026-11-21' }], TODAY).get('zuc')!, TODAY)).toBe('In programma: cena di venerdì 20 (+1)');
     expect(urgentNotPlanned(items, [friday], TODAY)).toEqual([]);
     expect(urgentNotPlanned(items, [], TODAY).map((i) => i.name)).toEqual(['Biscotti', 'Mozzarella']);
   });
@@ -189,6 +191,41 @@ describe('programma con l’IA', () => {
     ]);
     expect(r.proposals[0]!.recipe.uses[0]!.itemId).toBe('mozz');
     expect(parsePlan('niente', refs, slots, 2, 'now')).toBeNull();
+  });
+
+  it('piatti senza procedimento (arriva dopo) e prompt senza procedimento', () => {
+    const slots = planSlots(freeSlots([], TODAY, 1, ['cena'], TODAY, 10));
+    const { refs, prompt } = buildPlanPrompt(items, TODAY, slots, { servings: 2, vegetarian: false, lactoseFree: false, glutenFree: false, onlyPantry: false, staples: [], extra: '' });
+    expect(prompt).toContain('SENZA procedimento');
+    expect(JSON.stringify(PLAN_SCHEMA)).not.toContain('steps');
+    const r = parsePlan('{"meals":[{"slot":"s1","title":"Caprese","emoji":"🥗","minutes":10,"difficulty":"facile","uses":[{"ref":"p1","amount":"1"}],"missing":[],"why":""}],"note":""}', refs, slots, 3, 'now')!;
+    expect(r.proposals[0]!.recipe).toMatchObject({ title: 'Caprese', steps: [], servings: 3 });
+  });
+
+  it('risposte "strane" che prima davano "risposta non leggibile"', () => {
+    const slots = planSlots(freeSlots([], TODAY, 2, ['cena'], TODAY, 10));
+    const { refs } = buildPlanPrompt(items, TODAY, slots, { servings: 2, vegetarian: false, lactoseFree: false, glutenFree: false, onlyPantry: false, staples: [], extra: '' });
+    const one = (slot: unknown, title: string) => ({ slot, title, emoji: '🍝', minutes: 20, difficulty: 'facile', uses: [{ ref: 'P1', amount: '1' }], missing: [], why: '' });
+    // Lista "nuda" invece di un oggetto, codici scritti in modi diversi.
+    const bare = parsePlan(JSON.stringify([one('S2', 'Pasta'), one(1, 'Caprese')]), refs, slots, 2, 'now')!;
+    expect(bare.proposals.map((p) => [p.slot.code, p.recipe.title])).toEqual([
+      ['s1', 'Caprese'],
+      ['s2', 'Pasta'],
+    ]);
+    // Altro nome della lista e piatti senza codice: vanno nei pasti liberi in ordine.
+    const other = parsePlan(JSON.stringify({ pasti: [one(undefined, 'Zuppa'), one('cena', 'Riso')] }), refs, slots, 2, 'now')!;
+    expect(other.proposals.map((p) => [p.slot.code, p.recipe.title])).toEqual([
+      ['s1', 'Zuppa'],
+      ['s2', 'Riso'],
+    ]);
+    // Risposta tagliata a metà: si tengono i piatti completi.
+    const full = JSON.stringify({ meals: [one('s1', 'Caprese'), one('s2', 'Pasta e fagioli')], note: '' });
+    const cut = parsePlan(full.slice(0, full.indexOf('Pasta e fagioli') + 6), refs, slots, 2, 'now')!;
+    expect(cut.proposals.map((p) => p.recipe.title)).toEqual(['Caprese']);
+    // Testo prima e dopo il JSON.
+    expect(parsePlan(`Ecco il piano:\n${full}\nBuon appetito!`, refs, slots, 2, 'now')!.proposals).toHaveLength(2);
+    expect(slotCode('s 3')).toBe('s3');
+    expect(slotCode('pranzo')).toBe('');
   });
 });
 

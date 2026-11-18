@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatShort } from '../lib/logic/dates';
-  import { whenText, type Meal } from '../lib/logic/meals';
+  import { plannedText, type Meal } from '../lib/logic/meals';
   import { daysLeft, effectiveExpiry, limitedByOpening, openedText, urgencyOf } from '../lib/logic/expiry';
   import { locationLabel } from '../lib/logic/pantry';
   import { addToShopping, changeItem, finishItem, sheets } from '../lib/state/app.svelte';
@@ -11,7 +11,7 @@
   import QtyStepper from '../lib/ui/QtyStepper.svelte';
   import type { Item } from '../lib/types';
 
-  let { item, today, showLocation = false, plannedFor }: { item: Item; today: string; showLocation?: boolean; plannedFor?: Meal } = $props();
+  let { item, today, showLocation = false, plannedFor = [] }: { item: Item; today: string; showLocation?: boolean; plannedFor?: Meal[] } = $props();
 
   const days = $derived(daysLeft(item, today));
   const urgency = $derived(urgencyOf(days));
@@ -44,7 +44,7 @@
     <span class="text">
       <span class="name">{item.name}</span>
       {#if meta.length}<span class="meta">{meta.join(' · ')}</span>{/if}
-      {#if plannedFor}<span class="planned">🗓️ Per {whenText(plannedFor.date, plannedFor.slot, today)}</span>{/if}
+      {#if plannedFor.length}<span class="planned">🗓️ {plannedText(plannedFor, today)}</span>{/if}
     </span>
     <span class="badge-wrap"><ExpiryBadge {days} kind={item.expiryKind} estimated={item.expiryEstimated} /></span>
   </button>
@@ -115,8 +115,13 @@
     overflow-wrap: anywhere;
   }
   .planned {
+    align-self: flex-start;
+    margin-top: 3px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--accent-text);
     overflow-wrap: anywhere;
   }

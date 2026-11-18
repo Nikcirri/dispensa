@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Item } from '../types';
 import {
   buildRecipePrompt,
+  buildStepsPrompt,
+  buildUserRecipe,
+  fixTitle,
+  leftoverAfter,
+  parseSteps,
+  STEPS_SCHEMA,
+  stepsFromText,
+  withSteps,
   DEFAULT_FILTERS,
   groupRecipes,
   onlyExpiringMessage,
@@ -222,5 +230,45 @@ describe('ricette: solo prodotti in scadenza', () => {
     expect(prompt).toContain('Usa SOLO i prodotti in scadenza');
     expect(RECIPES_SCHEMA.required).toContain('note');
     expect(parseRecipes('{"recipes":[],"note":"Con i soli prodotti in scadenza non viene niente"}', [], 2, 'now')!.note).toContain('soli prodotti');
+  });
+});
+
+describe('ricette tue e procedimento scritto dopo', () => {
+  it('titoli con parole attaccate dal modello', () => {
+    expect(fixTitle('Pasta alla Carbonara dellaDispensa')).toBe('Pasta alla Carbonara della Dispensa');
+    expect(fixTitle('Risotto  ai funghi')).toBe('Risotto ai funghi');
+  });
+
+  it('il procedimento chiesto dopo: prompt con gli ingredienti, lettura e ricetta aggiornata', () => {
+    const base = buildUserRecipe(
+      { title: 'pasta al tonno', emoji: '🍝', servings: 4, minutes: 0, uses: [{ itemId: 'a', name: 'Tonno', emoji: '🐟', amount: '2 scatolette' }], missing: [{ name: 'Prezzemolo', amount: '' }], steps: [] },
+      'now',
+    );
+    expect(base).toMatchObject({ title: 'Pasta al tonno', servings: 4, minutes: 30, source: 'utente', steps: [] });
+    const prompt = buildStepsPrompt(base);
+    expect(prompt).toContain('«Pasta al tonno», per 4 persone');
+    expect(prompt).toContain('- Tonno: 2 scatolette');
+    expect(prompt).toContain('- Prezzemolo');
+    expect(STEPS_SCHEMA.required).toEqual(['steps', 'minutes', 'tip']);
+    const res = parseSteps('{"steps":["1. Lessa la pasta","Condisci"],"minutes":25,"tip":"Aggiungi capperi"}')!;
+    expect(res).toEqual({ steps: ['Lessa la pasta', 'Condisci'], minutes: 25, tip: 'Aggiungi capperi' });
+    expect(withSteps(base, res)).toMatchObject({ steps: ['Lessa la pasta', 'Condisci'], minutes: 25, tip: 'Aggiungi capperi', id: base.id });
+    expect(parseSteps('["Uno","Due"]')!.steps).toEqual(['Uno', 'Due']);
+    expect(parseSteps('boh')).toBeNull();
+    // Le ricette tue restano tali nei backup.
+    expect(sanitizeRecipe(JSON.parse(JSON.stringify(base)))!.source).toBe('utente');
+  });
+
+  it('procedimento scritto a mano: un passaggio per riga', () => {
+    expect(stepsFromText('1. Lessa la pasta\n\n- Scola\n• Condisci ')).toEqual(['Lessa la pasta', 'Scola', 'Condisci']);
+  });
+
+  it('quanti ne restano dopo averne usati', () => {
+    expect(leftoverAfter({ quantity: 6, unit: 'pz' }, '4 uova')).toBe(2);
+    expect(leftoverAfter({ quantity: 6, unit: 'pz' }, '6')).toBeNull();
+    expect(leftoverAfter({ quantity: 2, unit: 'pz' }, '100 g')).toBeNull();
+    expect(leftoverAfter({ quantity: 3, unit: 'conf' }, '1 confezione')).toBe(2);
+    expect(leftoverAfter({ quantity: 1, unit: 'l' }, '200 ml')).toBeNull();
+    expect(leftoverAfter({ quantity: 4, unit: 'pz' }, 'metà')).toBeNull();
   });
 });

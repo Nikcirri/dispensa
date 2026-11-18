@@ -6,7 +6,7 @@
   import { dishEmoji, mealWarnings, warningText, whenText, type Meal } from '../../lib/logic/meals';
   import { savedCount, useStatuses, type Recipe } from '../../lib/logic/recipes';
   import { app, hasAiKey, openRecipe, sheets, type MealRequest } from '../../lib/state/app.svelte';
-  import { addMissingToShopping, addRecipeMeal, addTextMeal, changeMeal, removeMeal, toggleMealDone } from '../../lib/state/meals.svelte';
+  import { addMissingToShopping, addRecipeMeal, addTextMeal, changeMeal, removeMeal, startCooking, toggleMealDone } from '../../lib/state/meals.svelte';
   import { loadRecipes, recipes } from '../../lib/state/recipes.svelte';
   import { showToast } from '../../lib/state/ui.svelte';
   import Icon from '../../lib/ui/Icon.svelte';
@@ -138,6 +138,17 @@
         </div>
       {/if}
 
+      {#if !meal.recipe}
+        <button class="card recipe-link" onclick={() => (sheets.editRecipe = { mode: 'meal', mealId: meal.id })}>
+          <span class="icon-tile"><Icon name="list" /></span>
+          <span class="grow">
+            <strong>Scegli gli ingredienti</strong>
+            <span>Dalla dispensa (risultano “in programma”) e da comprare</span>
+          </span>
+          <Icon name="chevronRight" size={20} />
+        </button>
+      {/if}
+
       {#if meal.recipe}
         {@const r = meal.recipe}
         <button class="card recipe-link" onclick={() => openRecipe(r, meal.id)}>
@@ -148,18 +159,24 @@
           </span>
           <Icon name="chevronRight" size={20} />
         </button>
-        {#if r.missing.length}
-          <button class="btn btn-soft btn-small" onclick={() => void addMissingToShopping(r.missing)}>
-            <Icon name="cartPlus" size={20} /> Ingredienti mancanti alla spesa ({r.missing.length})
+        <div class="row-btns">
+          <button class="btn btn-soft btn-small" onclick={() => (sheets.editRecipe = { mode: 'meal', mealId: meal.id })}>
+            <Icon name="edit" size={20} /> Modifica ingredienti
           </button>
-        {/if}
+          {#if r.missing.length}
+            <button class="btn btn-soft btn-small" onclick={() => void addMissingToShopping(r.missing)}>
+              <Icon name="cartPlus" size={20} /> Mancanti alla spesa ({r.missing.length})
+            </button>
+          {/if}
+        </div>
       {/if}
 
       <div class="actions">
-        <button class="btn" onclick={() => void toggleMealDone(meal)}>
-          <Icon name="check" size={20} />
-          {meal.done ? 'Segna da fare' : 'Fatto, l’ho cucinato'}
-        </button>
+        {#if meal.done}
+          <button class="btn" onclick={() => void toggleMealDone(meal)}><Icon name="refresh" size={20} /> Segna da fare</button>
+        {:else}
+          <button class="btn btn-primary" onclick={() => startCooking(meal)}><Icon name="check" size={20} /> L’ho cucinato</button>
+        {/if}
         <button class="btn" onclick={() => (sheets.plan = { mealId: meal.id })}><Icon name="calendar" size={20} /> Sposta in un altro giorno</button>
         <button class="btn btn-ghost danger" onclick={() => void remove(meal)}><Icon name="trash" size={20} /> Togli dal piano</button>
       </div>
@@ -299,6 +316,11 @@
     font-size: 0.875rem;
     color: var(--text-muted);
     overflow-wrap: anywhere;
+  }
+  .row-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .actions {
     display: flex;

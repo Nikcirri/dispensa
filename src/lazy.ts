@@ -17,6 +17,7 @@ export const load = {
   meal: () => import('./views/sheets/MealSheet.svelte'),
   plan: () => import('./views/sheets/PlanSheet.svelte'),
   planAi: () => import('./views/sheets/PlanAiSheet.svelte'),
+  editRecipe: () => import('./views/sheets/RecipeEditSheet.svelte'),
 };
 
 /** Prepara in anticipo tutte le parti, quando il telefono non ha altro da fare. */

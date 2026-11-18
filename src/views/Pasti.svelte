@@ -26,7 +26,7 @@
   import { tapFeedback } from '../lib/platform';
   import { shareText } from '../lib/services/share';
   import { app, hasAiKey, sheets } from '../lib/state/app.svelte';
-  import { addMissingToShopping, plan, toggleMealDone } from '../lib/state/meals.svelte';
+  import { addMissingToShopping, plan, tickMeal } from '../lib/state/meals.svelte';
   import { recipes } from '../lib/state/recipes.svelte';
   import Icon from '../lib/ui/Icon.svelte';
   import Ring from '../lib/ui/Ring.svelte';
@@ -181,6 +181,9 @@
                   <span class="m-emoji" aria-hidden="true">{m.emoji}</span>
                   <span class="m-text">
                     <span class="m-title">{m.title}</span>
+                    {#if !m.recipe && !m.done}
+                      <span class="m-sub">Tocca per scegliere gli ingredienti</span>
+                    {/if}
                     {#if m.recipe}
                       <span class="m-sub">
                         <Icon name="clock" size={14} />
@@ -192,7 +195,7 @@
                     {/if}
                   </span>
                 </button>
-                <button class="tick" class:on={m.done} aria-label={m.done ? `Da fare: ${m.title}` : `Fatto: ${m.title}`} onclick={() => void toggleMealDone(m)}>
+                <button class="tick" class:on={m.done} aria-label={m.done ? `Da fare: ${m.title}` : `Cucinato: ${m.title}`} onclick={() => void tickMeal(m)}>
                   {#if m.done}<Icon name="check" size={18} stroke={3} />{/if}
                 </button>
               </div>

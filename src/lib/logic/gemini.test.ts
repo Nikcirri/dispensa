@@ -15,6 +15,7 @@ import {
   looksBlank,
   looksLikeGeminiKey,
   modelLabel,
+  salvageList,
   progressHeadline,
   usedModelText,
   msToPacificMidnight,
@@ -315,5 +316,15 @@ describe('Gemini: avanzamento da mostrare', () => {
     ).toBe('3.8 Flash: limite gratuito raggiunto. Provo con 3.6 Flash');
     expect(usedModelText('gemini-3.8-flash', 9)).toBe('Fatto da Gemini 3.8 Flash in 9 s');
     expect(usedModelText('gemini-3.8-flash', 0)).toBe('Fatto da Gemini 3.8 Flash in meno di un secondo');
+  });
+});
+
+describe('risposte tagliate o a forma di lista', () => {
+  it('recupera gli oggetti completi di una lista, anche con stringhe che contengono parentesi', () => {
+    const text = '{"meals":[{"t":"a {x}"},{"t":"b ] c"},{"t":"tronc';
+    expect(salvageList(text, 'meals')).toEqual([{ t: 'a {x}' }, { t: 'b ] c' }]);
+    expect(salvageList('[{"a":1},{"a":2}]')).toEqual([{ a: 1 }, { a: 2 }]);
+    expect(salvageList('{"meals":[],"note":"{ciao}"}', 'meals')).toEqual([]);
+    expect(salvageList('niente', 'meals')).toEqual([]);
   });
 });

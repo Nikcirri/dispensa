@@ -11,8 +11,8 @@ import { tapFeedback } from '../platform';
 import { addShopping, deleteMeal, saveMeals, updateMeal } from '../repo';
 import { planMeals } from '../services/ai';
 import { AiError } from '../services/gemini';
-import { app, reloadMeals, reloadShopping } from './app.svelte';
-import { recipes } from './recipes.svelte';
+import { app, reloadMeals, reloadShopping, sheets } from './app.svelte';
+import { loadRecipes, recipes } from './recipes.svelte';
 import { showToast, showUndoToast } from './ui.svelte';
 
 export const plan = $state({
@@ -53,6 +53,18 @@ export async function changeMeal(id: string, change: Partial<Omit<Meal, 'id'>>):
 export async function toggleMealDone(meal: Meal): Promise<void> {
   void tapFeedback(meal.done ? 'light' : 'medium');
   await changeMeal(meal.id, { done: !meal.done });
+}
+
+/** "L'ho cucinato": si apre "Com'è andata?" con gli ingredienti, per aggiornare la dispensa. */
+export function startCooking(meal: Meal): void {
+  void tapFeedback();
+  sheets.cooked = { recipe: meal.recipe ? ($state.snapshot(meal.recipe) as Recipe) : null, title: meal.title, mealId: meal.id };
+}
+
+/** Il pallino accanto a un piatto: da fare → "Com'è andata?"; già fatto → di nuovo da fare. */
+export async function tickMeal(meal: Meal): Promise<void> {
+  if (meal.done) await toggleMealDone(meal);
+  else startCooking(meal);
 }
 
 /** Toglie un pasto dal piano, con "Annulla". */
@@ -116,6 +128,7 @@ let timer: ReturnType<typeof setInterval> | undefined;
 
 export async function generatePlan(): Promise<void> {
   if (planAi.loading) return;
+  await loadRecipes().catch(() => undefined);
   const slots = planTargets();
   if (!slots.length) {
     planAi.error = 'Questi pasti sono già tutti in programma. Scegli più giorni o anche gli altri pasti.';
@@ -155,7 +168,8 @@ export async function generatePlan(): Promise<void> {
     planAi.detail = res.detail;
     void tapFeedback('medium');
   } catch (e) {
-    planAi.error = e instanceof AiError ? e.message : `Non riesco a preparare il piano (${errorText(e)}).`;
+    const many = slots.length > 4 ? ' Puoi anche provare con meno giorni.' : '';
+    planAi.error = e instanceof AiError ? `${e.message}${many}` : `Non riesco a preparare il piano (${errorText(e)}).`;
     planAi.detail = e instanceof AiError ? e.detail : '';
   } finally {
     clearInterval(timer);

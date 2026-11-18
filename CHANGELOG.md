@@ -1,5 +1,14 @@
 # Novità
 
+## [1.2.1] - 2026-11-18
+
+- "Riempi con l'IA" molto più veloce: i piatti arrivano subito, il procedimento lo scrive quando apri il piatto.
+- Spuntando un piatto del piano si apre "Com'è andata?" e la dispensa si aggiorna.
+- Per i piatti scritti da te puoi scegliere gli ingredienti, dalla dispensa e da comprare.
+- Nelle ricette salvate (❤️) c'è "Nuova ricetta tua"; ogni ricetta si può modificare.
+- I prodotti dei pasti in programma sono segnati in Dispensa con "In programma: …".
+- "Ne resta" toglie i pezzi usati (es. 4 uova su 6) invece di segnare solo come aperto.
+
 ## [1.2.0] - 2026-11-18
 
 - Nuova scheda Pasti: pranzo e cena di ogni giorno. "Riempi con l'IA" usa prima ciò che scade.
