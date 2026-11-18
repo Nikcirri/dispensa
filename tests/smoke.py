@@ -100,6 +100,7 @@ def main():
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     errors = []
     next_scan = {"payload": SCAN}
+    recipe_requests = []
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
         ctx = browser.new_context(viewport={"width": WIDTH, "height": 800}, device_scale_factor=2, permissions=["camera"], locale="it-IT")
@@ -116,6 +117,7 @@ def main():
             if "Rispondi solo: ok" in body:
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}))
             elif '"recipes"' in body:
+                recipe_requests.append(body)
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(RECIPES))
             else:
                 r.fulfill(status=200, content_type="application/json", body=gemini_reply(next_scan["payload"]))
@@ -211,8 +213,11 @@ def main():
         page.click("nav button:has-text('Ricette')")
         page.wait_for_timeout(500)
         page.screenshot(path=f"{SHOTS}/14-ricette.png")
-        page.click("button.go:has-text('Genera ricette')")
+        # Invio sulla tastiera nel campo "Altro?" genera le ricette (come il pulsante).
+        page.fill("input.extra", "senza pecorino")
+        page.press("input.extra", "Enter")
         page.wait_for_selector("text=Frittata di zucchine", timeout=20000)
+        assert recipe_requests and "senza pecorino" in recipe_requests[-1], "la richiesta scritta deve arrivare all'IA"
         page.wait_for_timeout(900)
         page.screenshot(path=f"{SHOTS}/15-ricette-risultati.png")
         page.evaluate("document.querySelector('main').scrollTo(0, 520)")

@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+  import { blurOnEnter } from '../lib/ui/keyboard';
   import { flip } from 'svelte/animate';
   import { greeting } from '../lib/logic/dates';
   import { countByLocation, filterItems, groupByUrgency, LOCATIONS, sortItems, summarize } from '../lib/logic/pantry';
@@ -92,7 +93,7 @@
 
   <label class="search">
     <Icon name="search" size={20} />
-    <input type="search" placeholder="Cerca in dispensa…" bind:value={view.query} autocomplete="off" />
+    <input type="search" placeholder="Cerca in dispensa…" bind:value={view.query} autocomplete="off" enterkeyhint="search" onkeydown={blurOnEnter} />
     {#if view.query}
       <button class="clear" aria-label="Cancella la ricerca" onclick={() => (view.query = '')}><Icon name="close" size={18} /></button>
     {/if}

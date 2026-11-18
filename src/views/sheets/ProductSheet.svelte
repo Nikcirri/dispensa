@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { blurOnEnter } from '../../lib/ui/keyboard';
   import { untrack } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
@@ -229,7 +230,7 @@
       </button>
       <label class="field grow">
         <span>Nome</span>
-        <input class="input big" bind:this={nameInput} bind:value={d.name} oninput={onName} placeholder="Es. Latte parzialmente scremato" autocomplete="off" maxlength="80" />
+        <input class="input big" bind:this={nameInput} bind:value={d.name} oninput={onName} placeholder="Es. Latte parzialmente scremato" autocomplete="off" maxlength="80" enterkeyhint="done" onkeydown={blurOnEnter} />
       </label>
     </div>
 
@@ -304,11 +305,11 @@
         <div class="two">
           <label class="field">
             <span>Marca</span>
-            <input class="input" bind:value={d.brand} maxlength="40" autocomplete="off" />
+            <input class="input" bind:value={d.brand} maxlength="40" autocomplete="off" enterkeyhint="done" onkeydown={blurOnEnter} />
           </label>
           <label class="field">
             <span>Formato</span>
-            <input class="input" bind:value={d.size} maxlength="30" placeholder="500 g" autocomplete="off" />
+            <input class="input" bind:value={d.size} maxlength="30" placeholder="500 g" autocomplete="off" enterkeyhint="done" onkeydown={blurOnEnter} />
           </label>
         </div>
         <label class="field">
@@ -325,11 +326,13 @@
               d.openDays = Number.isFinite(n) && n > 0 ? Math.min(365, n) : null;
             }}
             placeholder="Es. 3"
+            enterkeyhint="done"
+            onkeydown={blurOnEnter}
           />
         </label>
         <label class="field">
           <span>Nota</span>
-          <input class="input" bind:value={d.note} maxlength="200" placeholder="Es. ripiano in alto" autocomplete="off" />
+          <input class="input" bind:value={d.note} maxlength="200" placeholder="Es. ripiano in alto" autocomplete="off" enterkeyhint="done" onkeydown={blurOnEnter} />
         </label>
         {#if d.barcode}<p class="note">Codice a barre: {d.barcode}</p>{/if}
       </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { blurOnEnter } from '../../lib/ui/keyboard';
   import { untrack } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
@@ -74,7 +75,7 @@
           <div class="line1">
             <input class="check" type="checkbox" bind:checked={r.on} aria-label="Aggiungi {r.d.name}" />
             <span class="emoji" aria-hidden="true">{r.d.emoji}</span>
-            <input class="input name" bind:value={r.d.name} aria-label="Nome" maxlength="80" />
+            <input class="input name" bind:value={r.d.name} aria-label="Nome" maxlength="80" enterkeyhint="done" onkeydown={blurOnEnter} />
           </div>
           <div class="line2">
             <select class="input small" bind:value={r.d.location} aria-label="Dove">

@@ -1,5 +1,10 @@
 # Novità
 
+## [1.1.1] - 2026-11-18
+
+- Ricette: nel campo "Altro?" il tasto Invio della tastiera ora genera subito le ricette con la tua richiesta.
+- Il tasto Invio chiude la tastiera anche nella ricerca e nei campi del prodotto; salva la chiave di Gemini.
+
 ## [1.1.0] - 2026-11-18
 
 - Nuova grafica sulla stessa linea di Nutrizione: verde lime, riassunto con l'anello e carattere Outfit.

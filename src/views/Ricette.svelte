@@ -8,6 +8,7 @@
   import { tapFeedback } from '../lib/platform';
   import { app, hasAiKey, sheets } from '../lib/state/app.svelte';
   import { generateRecipes, loadRecipes, recipes, rememberFilters } from '../lib/state/recipes.svelte';
+  import { showToast } from '../lib/state/ui.svelte';
   import Icon from '../lib/ui/Icon.svelte';
   import RecipeCard from './RecipeCard.svelte';
 
@@ -25,6 +26,18 @@
   const list = $derived(recipes.view === 'salvate' ? recipes.saved : recipes.list);
 
   let resultsEl = $state<HTMLElement | null>(null);
+  let extraInput = $state<HTMLInputElement | null>(null);
+
+  /** Invio nel campo "Altro?": chiude la tastiera e genera subito le ricette con la richiesta. */
+  function submitExtra(e: SubmitEvent) {
+    e.preventDefault();
+    extraInput?.blur();
+    if (!app.items.length) {
+      showToast('Prima aggiungi qualche prodotto alla dispensa.');
+      return;
+    }
+    void generateRecipes();
+  }
   let wasLoading = false;
 
   onMount(() => {
@@ -116,7 +129,18 @@
         <span class="num">👥 {recipes.filters.servings} {recipes.filters.servings === 1 ? 'persona' : 'persone'}</span>
         <button aria-label="Una persona in più" onclick={() => servings(1)}><Icon name="plus" size={18} /></button>
       </div>
-      <input class="input extra" bind:value={recipes.filters.extra} placeholder="Altro? Es. senza forno" maxlength="300" autocomplete="off" />
+      <!-- Invio sulla tastiera = "Genera ricette" con la richiesta scritta. -->
+      <form class="extra-form" onsubmit={submitExtra}>
+        <input
+          class="input extra"
+          bind:this={extraInput}
+          bind:value={recipes.filters.extra}
+          placeholder="Altro? Es. senza forno"
+          maxlength="300"
+          autocomplete="off"
+          enterkeyhint="send"
+        />
+      </form>
     </div>
 
     {#if recipes.loading}
@@ -276,9 +300,14 @@
     font-weight: 600;
     padding: 0 4px;
   }
-  .extra {
+  .extra-form {
     flex: 1;
     min-width: 160px;
+    display: flex;
+  }
+  .extra {
+    flex: 1;
+    min-width: 0;
     min-height: 46px;
     border-radius: 999px;
   }

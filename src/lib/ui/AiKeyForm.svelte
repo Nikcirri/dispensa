@@ -47,7 +47,23 @@
   <p class="note">Hai già una chiave (per esempio quella dell’app Nutrizione)? Va bene la stessa: la ritrovi nella stessa pagina.</p>
   <label class="field">
     <span>Chiave di Gemini</span>
-    <input class="input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AQ.…" bind:value={key} />
+    <input
+      class="input"
+      type="password"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      placeholder="AQ.…"
+      bind:value={key}
+      enterkeyhint="done"
+      onkeydown={(e) => {
+        // Invio sulla tastiera = "Salva la chiave".
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        (e.currentTarget as HTMLInputElement).blur();
+        if (key.trim() && !checking) void save();
+      }}
+    />
   </label>
   {#if key.trim() && !shapeOk}<p class="note">La chiave di solito inizia con “AQ.” (o “AIza”): controlla di aver copiato la Chiave API e non il nome o il numero del progetto.</p>{/if}
   <button class="btn btn-primary btn-block" disabled={!key.trim() || checking} onclick={save}>{checking ? 'Controllo…' : 'Salva la chiave'}</button>

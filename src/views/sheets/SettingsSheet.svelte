@@ -235,7 +235,7 @@
           void addStaple();
         }}
       >
-        <input class="input" bind:value={staple} placeholder="Es. zucchero, farina, aglio" maxlength="40" />
+        <input class="input" bind:value={staple} placeholder="Es. zucchero, farina, aglio" maxlength="40" enterkeyhint="done" />
         <button class="btn btn-soft" type="submit" disabled={!staple.trim()}>Aggiungi</button>
       </form>
     </div>
