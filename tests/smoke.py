@@ -333,6 +333,41 @@ def main():
         page.wait_for_selector("text=2 ingredienti aggiunti alla spesa")
         page.click("button[aria-label='Chiudi']")
         page.wait_for_timeout(300)
+        # Comprati e messi in dispensa: non mancano più e risultano "In programma".
+        page.click("nav button:has-text('Spesa')")
+        page.wait_for_selector("text=Da comprare")
+        page.click("button.tick[aria-label='Preso: Sedano']")
+        page.click("button.tick[aria-label='Preso: Carote']")
+        page.wait_for_timeout(300)
+        page.click("text=Metti in dispensa")
+        page.wait_for_selector("text=Controlla dove va ogni prodotto")
+        page.locator("button.btn-primary:has-text('Aggiungi')").click()
+        page.wait_for_timeout(600)
+        page.click("nav button:has-text('Pasti')")
+        page.wait_for_selector("text=Cosa mangiamo?")
+        page.wait_for_timeout(300)
+        hints = " ".join(page.locator(".hint").all_inner_texts())
+        assert "Sedano" not in hints and "Carote" not in hints, f"gli ingredienti comprati non devono più mancare: {hints}"
+        page.click("nav button:has-text('Dispensa')")
+        page.wait_for_timeout(300)
+        page.fill("input[placeholder='Cerca in dispensa…']", "sedano")
+        page.wait_for_selector("text=In programma:")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/25d-comprato-in-programma.png")
+        page.fill("input[placeholder='Cerca in dispensa…']", "")
+        page.wait_for_timeout(2600)
+        # Trascina in giù per aggiornare.
+        page.evaluate("""() => {
+          const main = document.querySelector('main');
+          main.scrollTo(0, 0);
+          const t = (y) => new Touch({ identifier: 1, target: main, clientX: 180, clientY: y });
+          main.dispatchEvent(new TouchEvent('touchstart', { touches: [t(150)], bubbles: true }));
+          main.dispatchEvent(new TouchEvent('touchmove', { touches: [t(400)], bubbles: true }));
+          main.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
+        }""")
+        page.wait_for_selector("text=Aggiornato ✓")
+        page.click("nav button:has-text('Pasti')")
+        page.wait_for_timeout(300)
         page.click("text=Frittata di zucchine e mozzarella")
         page.wait_for_selector("text=Apri la ricetta")
         page.wait_for_timeout(300)

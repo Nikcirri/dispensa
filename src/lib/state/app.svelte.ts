@@ -3,7 +3,7 @@ import { db } from '../db';
 import { reportError } from '../errors';
 import { addDays, todayKey } from '../logic/dates';
 import { applyDraft, itemFromDraft, type ProductDraft } from '../logic/drafts';
-import type { Meal, MealSlot } from '../logic/meals';
+import { mealsToRelink, type Meal, type MealSlot } from '../logic/meals';
 import type { Recipe } from '../logic/recipes';
 import { defaultSettings } from '../logic/settings';
 import { widgetData } from '../logic/widget';
@@ -16,6 +16,7 @@ import {
   loadSettings,
   mealsBetween,
   pruneMeals,
+  saveMeals,
   recentTemplates,
   removeItem,
   saveItem,
@@ -136,6 +137,7 @@ export async function initApp(): Promise<void> {
   app.aiKey = await getAiKey(db);
   await pruneMeals(db, addDays(app.today, -MEALS_KEEP_DAYS)).catch(() => 0);
   await Promise.all([reloadItems(false), reloadShopping(), reloadTemplates(), loadMeals()]);
+  await relinkMeals();
   app.ready = true;
   scheduleNotifications();
   syncWidgets();
@@ -148,6 +150,32 @@ async function loadMeals(): Promise<void> {
 /** Ricarica il piano dei pasti (e aggiorna i widget). */
 export async function reloadMeals(): Promise<void> {
   await loadMeals();
+  await relinkMeals();
+  syncWidgets();
+}
+
+/**
+ * I pasti ancora da fare si ricollegano alla dispensa: gli ingredienti "da comprare" che ora ci sono
+ * non mancano più (e risultano "In programma"), quelli finiti e ricomprati tornano collegati.
+ */
+async function relinkMeals(): Promise<void> {
+  const changed = mealsToRelink($state.snapshot(app.meals) as Meal[], app.items, app.today);
+  if (!changed.length) return;
+  try {
+    await saveMeals(db, changed);
+    await loadMeals();
+  } catch {
+    // Si riprova alla prossima modifica: intanto i conti si fanno lo stesso con la dispensa di adesso.
+  }
+}
+
+/** "Trascina in giù per aggiornare": rilegge tutto dal telefono e rimette in pari pasti, avvisi e widget. */
+export async function refreshAll(): Promise<void> {
+  tickToday();
+  await Promise.all([reloadItems(false), reloadShopping(), reloadTemplates(), loadMeals()]);
+  await relinkMeals();
+  scheduleNotifications();
+  lastWidget = '';
   syncWidgets();
 }
 
@@ -205,6 +233,7 @@ export function scheduleNotifications(): void {
 export async function reloadItems(reschedule = true): Promise<void> {
   app.items = await allItems(db);
   if (reschedule) scheduleNotifications();
+  if (app.ready) await relinkMeals();
   syncWidgets();
 }
 

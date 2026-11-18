@@ -32,7 +32,7 @@
     const list = app.meals.filter((m) => m.date === next.date && !m.done).sort(compareMeals);
     return { date: next.date, list };
   });
-  const planned = $derived(plannedUses(app.meals, app.today));
+  const planned = $derived(plannedUses(app.meals, app.today, app.items));
   const urgentNow = $derived(summary.urgent + summary.expired);
   const fresh = $derived(summary.total - summary.urgent - summary.expired - summary.soon);
   const hour = $derived(new Date().getHours());

@@ -6,7 +6,8 @@
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
   import { onNotificationTap } from './lib/services/notifications';
   import { onWidgetAction } from './lib/services/widgets';
-  import { app, closeAllSheets, initApp, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
+  import { app, closeAllSheets, initApp, refreshAll, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
+  import { showToast } from './lib/state/ui.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay } from './lib/state/ui.svelte';
   import BusyOverlay from './lib/ui/BusyOverlay.svelte';
@@ -27,6 +28,44 @@
   const toBuy = $derived(app.shopping.filter((s) => !s.done).length);
 
   let main = $state<HTMLElement | null>(null);
+
+  // ---------- Trascina in giù per aggiornare (come in Nutrizione; non nella fotocamera) ----------
+  const PULL_TRIGGER = 64;
+  let pull = $state(0);
+  let refreshing = $state(false);
+  let pullStart: number | null = null;
+  const canPull = $derived(app.ready && app.settings.onboarded && app.tab !== 'aggiungi');
+
+  function onTouchStart(e: TouchEvent) {
+    pullStart = canPull && !refreshing && main && main.scrollTop <= 0 ? (e.touches[0]?.clientY ?? null) : null;
+  }
+
+  function onTouchMove(e: TouchEvent) {
+    if (pullStart === null || !main) return;
+    const dy = (e.touches[0]?.clientY ?? pullStart) - pullStart;
+    pull = dy > 0 && main.scrollTop <= 0 ? Math.min(110, dy * 0.5) : 0;
+  }
+
+  async function onTouchEnd() {
+    if (pullStart === null) return;
+    pullStart = null;
+    if (pull < PULL_TRIGGER) {
+      pull = 0;
+      return;
+    }
+    refreshing = true;
+    pull = 56;
+    void tapFeedback();
+    try {
+      await Promise.all([refreshAll(), refreshUpdate().catch(() => undefined)]);
+      showToast('Aggiornato ✓');
+    } catch (e) {
+      reportError(e);
+    } finally {
+      refreshing = false;
+      pull = 0;
+    }
+  }
 
   function selectTab(tab: Tab) {
     if (app.tab === tab) {
@@ -86,7 +125,19 @@
   {#await load.onboarding() then m}<m.default />{/await}
 {:else}
   <div class="shell">
-    <main bind:this={main} class:camera={app.tab === 'aggiungi'}>
+    {#if pull > 0}
+      <div class="ptr" style:transform="translate(-50%, {pull - 44}px)" style:opacity={Math.min(1, pull / PULL_TRIGGER)} aria-hidden="true">
+        <span class:spin={refreshing} style:transform={refreshing ? undefined : `rotate(${pull * 4}deg)`}><Icon name="refresh" size={20} /></span>
+      </div>
+    {/if}
+    <main
+      bind:this={main}
+      class:camera={app.tab === 'aggiungi'}
+      ontouchstart={onTouchStart}
+      ontouchmove={onTouchMove}
+      ontouchend={onTouchEnd}
+      ontouchcancel={onTouchEnd}
+    >
       {#if update.available && (!update.dismissed || update.phase !== 'idle') && app.tab !== 'aggiungi'}
         <div class="update card" role="status">
           {#if update.phase === 'download'}
@@ -179,6 +230,32 @@
   .splash {
     height: 100%;
     background: var(--bg);
+  }
+  .ptr {
+    position: fixed;
+    left: 50%;
+    top: calc(var(--safe-top) + 8px);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+    color: var(--accent-text);
+    display: grid;
+    place-items: center;
+    z-index: 30;
+    pointer-events: none;
+  }
+  .ptr span {
+    display: grid;
+  }
+  .spin {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .shell {
     height: 100%;

@@ -3,6 +3,9 @@ import type { Item } from '../types';
 import {
   dayTitle,
   dishEmoji,
+  findInPantry,
+  mealsToRelink,
+  relinkRecipe,
   firstFreeSlot,
   freeSlots,
   mealFromRecipe,
@@ -226,6 +229,54 @@ describe('programma con l’IA', () => {
     expect(parsePlan(`Ecco il piano:\n${full}\nBuon appetito!`, refs, slots, 2, 'now')!.proposals).toHaveLength(2);
     expect(slotCode('s 3')).toBe('s3');
     expect(slotCode('pranzo')).toBe('');
+  });
+});
+
+describe('ingredienti comprati dopo', () => {
+  const pomodori = item({ id: 'pom', name: 'Pomodori', expiry: '2026-11-24' });
+  const pelati = item({ id: 'pel', name: 'Pomodori pelati', location: 'dispensa', expiry: '2028-05-11', expiryKind: 'tmc' });
+  const latte = item({ id: 'lat', name: 'Latte parzialmente scremato', expiry: '2026-11-24' });
+  const uovo = item({ id: 'uov', name: 'Uovo', expiry: '2026-12-16' });
+
+  it('trova il prodotto: stesso nome, singolare/plurale, qualche parola in più, ma non un prodotto diverso', () => {
+    expect(findInPantry('pomodori pelati', [pomodori, pelati])?.id).toBe('pel');
+    expect(findInPantry('Pomodoro', [pelati, pomodori])?.id).toBe('pom');
+    expect(findInPantry('Uova', [uovo])?.id).toBe('uov');
+    expect(findInPantry('Latte', [latte])?.id).toBe('lat');
+    // Solo pelati in casa: i pomodori freschi mancano ancora.
+    expect(findInPantry('Pomodori', [pelati])).toBeNull();
+    expect(findInPantry('Basilico', [pomodori, latte])).toBeNull();
+  });
+
+  it('gli ingredienti comprati non mancano più e diventano "in programma"', () => {
+    const r = recipe({
+      id: 'cacc',
+      title: 'Pollo alla cacciatora',
+      uses: [{ itemId: 'gone', name: 'Rosmarino', emoji: '🌿', amount: '1 rametto' }],
+      missing: [
+        { name: 'Pomodori', amount: '400 g' },
+        { name: 'Pomodori pelati', amount: '400 g' },
+        { name: 'Prezzemolo', amount: '' },
+      ],
+    });
+    const rosmarino = item({ id: 'ros', name: 'Rosmarino', expiry: '2026-11-23' });
+    const linked = relinkRecipe(r, [pelati, pomodori, rosmarino])!;
+    expect(linked.missing.map((m) => m.name)).toEqual(['Prezzemolo']);
+    expect(linked.uses.map((u) => [u.itemId, u.amount])).toEqual([
+      ['ros', '1 rametto'],
+      ['pom', '400 g'],
+      ['pel', '400 g'],
+    ]);
+    expect(relinkRecipe(linked, [pelati, pomodori, rosmarino])).toBeNull();
+
+    const meal = mealFromRecipe(r, '2026-11-19', 'cena', 'x');
+    const days = weekDays('2026-11-16');
+    expect(shoppingForMeals([meal], days, [], [], TODAY).map((x) => x.name)).toEqual(['Pomodori', 'Pomodori pelati', 'Prezzemolo', 'Rosmarino']);
+    // Dopo la spesa: manca solo il prezzemolo, e i prodotti risultano in programma.
+    expect(shoppingForMeals([meal], days, [pomodori, pelati, rosmarino], [], TODAY).map((x) => x.name)).toEqual(['Prezzemolo']);
+    expect(plannedUses([meal], TODAY, [pomodori, pelati, rosmarino]).get('pel')?.[0]?.id).toBe(meal.id);
+    expect(mealWarnings(meal, [pomodori, pelati, rosmarino], TODAY)).toEqual([]);
+    expect(mealsToRelink([meal, { ...meal, id: 'fatto', done: true }], [pomodori], TODAY).map((m) => m.id)).toEqual([meal.id]);
   });
 });
 

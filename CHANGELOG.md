@@ -1,5 +1,11 @@
 # Novità
 
+## [1.2.2] - 2026-11-18
+
+- Gli ingredienti comprati e messi in dispensa non risultano più mancanti nei pasti in programma.
+- Trascina in giù la pagina per aggiornarla (Dispensa, Ricette, Pasti e Spesa).
+- Un prodotto finito e ricomprato torna collegato ai pasti che lo usano.
+
 ## [1.2.1] - 2026-11-18
 
 - "Riempi con l'IA" molto più veloce: i piatti arrivano subito, il procedimento lo scrive quando apri il piatto.

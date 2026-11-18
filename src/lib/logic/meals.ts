@@ -215,7 +215,8 @@ export interface MealWarning {
 export function mealWarnings(meal: Meal, items: readonly Item[], today: string): MealWarning[] {
   if (!meal.recipe || meal.done || meal.date < today) return [];
   const out: MealWarning[] = [];
-  for (const u of meal.recipe.uses) {
+  const recipe = relinkRecipe(meal.recipe, items) ?? meal.recipe;
+  for (const u of recipe.uses) {
     if (!u.itemId) continue;
     const item = items.find((i) => i.id === u.itemId);
     if (!item) {
@@ -237,11 +238,11 @@ export function warningText(w: MealWarning, today: string): string {
 }
 
 /** Per ogni prodotto, i pasti ancora da fare che lo usano (da oggi in avanti, il più vicino per primo). */
-export function plannedUses(meals: readonly Meal[], today: string): Map<string, Meal[]> {
+export function plannedUses(meals: readonly Meal[], today: string, items: readonly Item[] = []): Map<string, Meal[]> {
   const map = new Map<string, Meal[]>();
   for (const m of [...meals].sort(compareMeals)) {
     if (m.done || m.date < today || !m.recipe) continue;
-    for (const u of m.recipe.uses) {
+    for (const u of (relinkRecipe(m.recipe, items) ?? m.recipe).uses) {
       if (!u.itemId) continue;
       const list = map.get(u.itemId);
       if (list) {
@@ -268,7 +269,7 @@ export function plannedMealOf(recipeId: string, meals: readonly Meal[], today: s
 
 /** Prodotti da usare subito (oggi, domani o scaduti da poco) che nessun pasto in programma usa. */
 export function urgentNotPlanned(items: readonly Item[], meals: readonly Meal[], today: string, max = 4): Item[] {
-  const planned = plannedUses(meals, today);
+  const planned = plannedUses(meals, today, items);
   return items
     .filter((i) => {
       const d = daysLeft(i, today);
@@ -277,6 +278,99 @@ export function urgentNotPlanned(items: readonly Item[], meals: readonly Meal[],
     })
     .sort((a, b) => (effectiveExpiry(a) ?? '').localeCompare(effectiveExpiry(b) ?? ''))
     .slice(0, max);
+}
+
+// ---------- Ingredienti comprati dopo ----------
+
+const STOP_WORDS = new Set(['del', 'dei', 'della', 'delle', 'dello', 'degli', 'alla', 'alle', 'allo', 'con', 'per', 'gli', 'una', 'uno', 'senza']);
+/** Parole che fanno un prodotto diverso: "Pomodori" non sono "Pomodori pelati". */
+const OTHER_PRODUCT = ['pelat', 'passat', 'concentrat', 'polver', 'condensat', 'sciroppat', 'scatol', 'sottolio', 'sottacet'];
+
+/** "Pomodori pelati" → ["pomodor", "pelat"]: parole senza la vocale finale (pomodoro/pomodori, carota/carote). */
+export function nameStems(name: string): string[] {
+  return normalize(name)
+    .split(' ')
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+    .map((w) => (w.length > 3 ? w.replace(/[aeiou]+$/, '') : w));
+}
+
+/**
+ * Il prodotto della dispensa che corrisponde a un ingrediente scritto ("Pomodori pelati", "Uova"):
+ * stesso nome, oppure stesse parole al singolare/plurale, oppure un prodotto con qualche parola in più
+ * ("Latte" → "Latte parzialmente scremato") ma non un prodotto diverso ("Pomodori" ≠ "Pomodori pelati").
+ */
+export function findInPantry(name: string, items: readonly Item[], exclude: ReadonlySet<string> = new Set()): Item | null {
+  const target = nameStems(name);
+  if (!target.length) return null;
+  const candidates = items.filter((i) => !exclude.has(i.id));
+  const n = normalize(name);
+  const exact = candidates.find((i) => normalize(i.name) === n);
+  if (exact) return exact;
+  const key = target.join(' ');
+  const same = candidates.find((i) => nameStems(i.name).join(' ') === key);
+  if (same) return same;
+  const containing = candidates
+    .filter((i) => {
+      const words = nameStems(i.name);
+      if (!target.every((t) => words.includes(t))) return false;
+      const extra = words.filter((w) => !target.includes(w));
+      return !extra.some((w) => OTHER_PRODUCT.some((o) => w.startsWith(o)));
+    })
+    .sort((a, b) => a.name.length - b.name.length);
+  return containing[0] ?? null;
+}
+
+/**
+ * Collega la ricetta alla dispensa di adesso:
+ * - gli ingredienti "da comprare" che ora ci sono (comprati, o aggiunti dopo) diventano prodotti usati:
+ *   non risultano più mancanti e in Dispensa sono "In programma";
+ * - un prodotto usato che non c'è più (finito) si ricollega a uno uguale comprato di nuovo.
+ * Restituisce null se non cambia niente.
+ */
+export function relinkRecipe(recipe: Recipe, items: readonly Item[]): Recipe | null {
+  const present = new Set(items.map((i) => i.id));
+  const taken = new Set(recipe.uses.map((u) => u.itemId).filter((id): id is string => !!id && present.has(id)));
+  let changed = false;
+  const uses = recipe.uses.map((u) => {
+    if (u.itemId && present.has(u.itemId)) return u;
+    const item = findInPantry(u.name, items, taken);
+    if (!item) return u;
+    taken.add(item.id);
+    changed = true;
+    return { ...u, itemId: item.id, name: item.name, emoji: item.emoji || u.emoji };
+  });
+  const found = new Map<number, Item>();
+  // Prima i nomi uguali, poi le corrispondenze più larghe: "Pomodori pelati" non si prende i "Pomodori".
+  for (const strict of [true, false]) {
+    recipe.missing.forEach((m, i) => {
+      if (found.has(i)) return;
+      const item = findInPantry(m.name, items, taken);
+      if (!item) return;
+      const isStrict = normalize(item.name) === normalize(m.name) || nameStems(item.name).join(' ') === nameStems(m.name).join(' ');
+      if (strict && !isStrict) return;
+      found.set(i, item);
+      taken.add(item.id);
+    });
+  }
+  if (!found.size && !changed) return null;
+  const missing: Recipe['missing'] = [];
+  recipe.missing.forEach((m, i) => {
+    const item = found.get(i);
+    if (item) uses.push({ itemId: item.id, name: item.name, emoji: item.emoji || '🛒', amount: m.amount });
+    else missing.push(m);
+  });
+  return { ...recipe, uses, missing };
+}
+
+/** I pasti ancora da fare da ricollegare alla dispensa (ingredienti comprati o ricomprati), già aggiornati. */
+export function mealsToRelink(meals: readonly Meal[], items: readonly Item[], today: string): Meal[] {
+  const out: Meal[] = [];
+  for (const m of meals) {
+    if (m.done || m.date < today || !m.recipe) continue;
+    const recipe = relinkRecipe(m.recipe, items);
+    if (recipe) out.push({ ...m, recipe });
+  }
+  return out;
 }
 
 export interface ToBuy {
@@ -299,8 +393,10 @@ export function shoppingForMeals(meals: readonly Meal[], days: readonly string[]
   };
   for (const m of [...meals].sort(compareMeals)) {
     if (m.done || !m.recipe || m.date < today || !days.includes(m.date)) continue;
-    for (const x of m.recipe.missing) add(x.name, x.amount, m.title);
-    for (const u of m.recipe.uses) if (u.itemId && !items.some((i) => i.id === u.itemId)) add(u.name, u.amount, m.title);
+    // Quelli comprati nel frattempo non mancano più.
+    const recipe = relinkRecipe(m.recipe, items) ?? m.recipe;
+    for (const x of recipe.missing) add(x.name, x.amount, m.title);
+    for (const u of recipe.uses) if (u.itemId && !items.some((i) => i.id === u.itemId)) add(u.name, u.amount, m.title);
   }
   return out;
 }
