@@ -106,6 +106,8 @@ export const sheets = $state({
   meal: null as MealRequest | null,
   plan: null as PlanRequest | null,
   planAi: false,
+  /** Casa condivisa (`join`: si apre già su "Ho un invito"). */
+  house: null as null | 'main' | 'join',
 });
 
 /** Chiude tutti i fogli (per esempio quando si apre l'app da una notifica). */
@@ -122,6 +124,7 @@ export function closeAllSheets(): void {
   sheets.meal = null;
   sheets.plan = null;
   sheets.planAi = false;
+  sheets.house = null;
 }
 
 export function anySheetOpen(): boolean {
@@ -136,7 +139,8 @@ export function anySheetOpen(): boolean {
     sheets.editRecipe ||
     sheets.meal ||
     sheets.plan ||
-    sheets.planAi
+    sheets.planAi ||
+    sheets.house
   );
 }
 

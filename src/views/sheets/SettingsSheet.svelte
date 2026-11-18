@@ -11,6 +11,7 @@
   import { readBackupFile, restoreBackup, shareBackup } from '../../lib/services/share';
   import { app, initApp, scheduleNotifications, sheets, updateSettings } from '../../lib/state/app.svelte';
   import { recipes } from '../../lib/state/recipes.svelte';
+  import { house } from '../../lib/state/house.svelte';
   import { checkUpdateNow, installUpdate } from '../../lib/state/update.svelte';
   import { confirmDialog, showToast, withBusy } from '../../lib/state/ui.svelte';
   import AiKeyForm from '../../lib/ui/AiKeyForm.svelte';
@@ -120,7 +121,9 @@
       const data = await readBackupFile(file);
       const ok = await confirmDialog({
         title: 'Ripristinare il backup?',
-        message: `Contiene ${data.items.length} prodotti e ${data.shopping.length} voci della spesa. I dati attuali saranno sostituiti.`,
+        message: `Contiene ${data.items.length} prodotti e ${data.shopping.length} voci della spesa. I dati attuali saranno sostituiti.${
+          house.joined ? ' Sei in una casa condivisa: dispensa, spesa e pasti cambiano anche per gli altri della casa.' : ''
+        }`,
         confirmLabel: 'Ripristina',
         danger: true,
       });
@@ -189,6 +192,25 @@
       />
       {#if changingKey}<button class="btn btn-ghost btn-small" onclick={() => (changingKey = false)}>Annulla</button>{/if}
     {/if}
+  </div>
+
+  <h3 class="section-title">Casa condivisa</h3>
+  <div class="list">
+    <button class="row" onclick={() => (sheets.house = 'main')}>
+      <Icon name="home" />
+      <span class="grow">
+        {#if house.joined}
+          <span class="title">Casa condivisa{house.members.length > 1 ? ` · ${house.members.length} persone` : ''}</span>
+          <span class="sub">
+            {house.status === 'online' ? '🟢 Collegata' : house.status === 'error' ? '🔴 Qualcosa non va: tocca per vedere' : '🟡 In attesa di internet'}
+          </span>
+        {:else}
+          <span class="title">Condividi con chi vive con te</span>
+          <span class="sub">Stessa dispensa, stessa spesa e stessi pasti su più telefoni</span>
+        {/if}
+      </span>
+      <Icon name="chevronRight" size={20} />
+    </button>
   </div>
 
   <h3 class="section-title">Avvisi delle scadenze</h3>
@@ -266,7 +288,9 @@
   </div>
 
   <p class="note about">
-    I dati restano solo su questo telefono. Le foto vanno a Google Gemini solo quando le fai leggere; i codici a barre si cercano su Open Food Facts
+    {house.joined
+      ? 'Dispensa, spesa e pasti sono anche nella casa condivisa (il tuo progetto Firebase); il resto resta solo su questo telefono.'
+      : 'I dati restano solo su questo telefono.'} Le foto vanno a Google Gemini solo quando le fai leggere; i codici a barre si cercano su Open Food Facts
     (database libero, licenza ODbL).
   </p>
 </Sheet>

@@ -519,6 +519,33 @@ def main():
         page.wait_for_selector("text=Avvisi delle scadenze")
         page.wait_for_timeout(300)
         page.screenshot(path=f"{SHOTS}/22-impostazioni.png")
+        # Casa condivisa: le schermate per crearla e per entrare con un invito (senza collegarsi davvero a Firebase).
+        page.click("text=Condividi con chi vive con te")
+        page.wait_for_selector("text=Ho un invito")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/32-casa.png")
+        page.click("text=Crea la casa")
+        page.wait_for_selector("text=Apri Firebase")
+        page.fill("textarea[placeholder^='const firebaseConfig']", "ciao")
+        page.wait_for_selector("text=Non trovo la configurazione")
+        page.fill("textarea[placeholder^='const firebaseConfig']", 'const firebaseConfig = {\n  apiKey: "AIzaSyD-abcdefghijklmnopqrstuvwxyz012345",\n  authDomain: "dispensa-casa-3f2a1.firebaseapp.com",\n  projectId: "dispensa-casa-3f2a1",\n  appId: "1:1234:web:abcd"\n};')
+        page.wait_for_selector("text=Progetto “dispensa-casa-3f2a1”")
+        page.fill("input[placeholder='Es. Nicola']", "Nicola")
+        assert page.locator("button.btn-primary:has-text('Crea la casa')").is_enabled(), "con configurazione e nome si può creare la casa"
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/33-casa-crea.png")
+        page.evaluate("document.querySelector('.sheet .body').scrollTo(0, 99999)")
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/33b-casa-crea-fondo.png")
+        page.click("text=Indietro")
+        page.click("text=Ho un invito")
+        page.fill("textarea[placeholder^='Tieni premuto qui']", "ciao mamma")
+        page.wait_for_selector("text=Non trovo il codice")
+        assert not page.locator("button.btn-primary:has-text('Entra nella casa')").is_enabled(), "senza invito valido non si entra"
+        page.wait_for_timeout(300)
+        page.screenshot(path=f"{SHOTS}/34-casa-invito.png")
+        page.locator("button[aria-label='Chiudi']").last.click()
+        page.wait_for_timeout(300)
         page.click("button[aria-label='Chiudi']")
 
         # Tema scuro

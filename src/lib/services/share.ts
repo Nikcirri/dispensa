@@ -24,6 +24,31 @@ export async function shareText(title: string, text: string): Promise<boolean> {
   }
 }
 
+/** Copia un testo negli appunti. false se il telefono non lo permette. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Riserva per le WebView che non hanno gli appunti "moderni".
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+}
+
 /** Crea il backup e apre "Condividi" (Drive, email, WhatsApp…). false se si chiude senza scegliere. */
 export async function shareBackup(): Promise<boolean> {
   const text = makeBackup(await exportAll(db), APP_VERSION);

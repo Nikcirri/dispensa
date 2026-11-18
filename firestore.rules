@@ -1,0 +1,41 @@
+rules_version = '2';
+// Regole della casa condivisa di Dispensa.
+// Si entra in una casa solo conoscendo il codice dell'invito; poi si vedono solo dispensa, spesa e pasti di quella casa.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isMember(house) {
+      return signedIn() && exists(/databases/$(database)/documents/houses/$(house)/members/$(request.auth.uid));
+    }
+    function houseCode(house) {
+      return get(/databases/$(database)/documents/houses/$(house)).data.code;
+    }
+
+    match /houses/{house} {
+      allow get: if isMember(house);
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 16;
+
+      match /members/{uid} {
+        allow read: if isMember(house);
+        allow create, update: if signedIn() && uid == request.auth.uid
+          && request.resource.data.code == houseCode(house)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 40;
+        allow delete: if signedIn() && uid == request.auth.uid;
+      }
+
+      match /{table}/{id} {
+        allow read: if table in ['items', 'shopping', 'meals'] && isMember(house);
+        allow delete: if table in ['items', 'shopping', 'meals'] && isMember(house);
+        allow create, update: if table in ['items', 'shopping', 'meals'] && isMember(house)
+          && request.resource.data.json is string
+          && request.resource.data.json.size() < 1000000;
+      }
+    }
+  }
+}

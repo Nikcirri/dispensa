@@ -81,7 +81,7 @@ function sanitizeHistory(v: unknown): HistoryEntry | null {
   };
 }
 
-function sanitizeShopping(v: unknown): ShoppingItem | null {
+export function sanitizeShopping(v: unknown): ShoppingItem | null {
   if (!isObj(v) || !isStr(v.id) || !isStr(v.name)) return null;
   return {
     id: v.id,

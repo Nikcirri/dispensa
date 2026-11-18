@@ -4,7 +4,7 @@
   import { draftFromName, type ProductDraft } from '../lib/logic/drafts';
   import { isNative } from '../lib/platform';
   import { askNotificationPermission } from '../lib/services/notifications';
-  import { addDrafts, app, scheduleNotifications, updateSettings } from '../lib/state/app.svelte';
+  import { addDrafts, app, scheduleNotifications, sheets, updateSettings } from '../lib/state/app.svelte';
   import Icon from '../lib/ui/Icon.svelte';
   import Ring from '../lib/ui/Ring.svelte';
 
@@ -21,7 +21,8 @@
     ['Piselli surgelati', 150],
   ];
 
-  async function start(withDemo: boolean) {
+  /** `invite`: chi ha ricevuto un invito entra subito nella casa condivisa (senza prodotti di prova). */
+  async function start(withDemo: boolean, invite = false) {
     if (starting) return;
     starting = true;
     try {
@@ -37,6 +38,7 @@
         s.onboarded = true;
       });
       scheduleNotifications();
+      if (invite) sheets.house = 'join';
     } catch (e) {
       starting = false;
       reportError(e);
@@ -73,6 +75,7 @@
       <span class="go-end"><Icon name="check" size={18} /></span>
     </button>
     <button class="btn btn-ghost btn-block" disabled={starting} onclick={() => start(true)}>Inizia con qualche prodotto di prova</button>
+    <button class="btn btn-ghost btn-block invite" disabled={starting} onclick={() => start(false, true)}><Icon name="home" size={20} /> Ho un invito per una casa condivisa</button>
     <p class="note center">Android ti chiederà il permesso per gli avvisi delle scadenze.</p>
   </div>
 </div>

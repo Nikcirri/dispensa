@@ -20,6 +20,39 @@ jobs:
       - run: npm ci
       - run: npm run verify
 
+  # Casa condivisa: due "telefoni" (browser) collegati all'emulatore di Firebase, con le regole di firestore.rules.
+  casa:
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - name: Prepara il browser di prova
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Casa condivisa con l'emulatore di Firebase
+        run: npx -y firebase-tools@15 emulators:exec --only auth,firestore --project demo-dispensa "python3 tests/house.py"
+      - name: Screenshot della prova
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-casa
+          path: tests/screenshots/house-*.png
+          if-no-files-found: ignore
+
   android:
     needs: verify
     runs-on: ubuntu-24.04

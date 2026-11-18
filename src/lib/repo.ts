@@ -4,6 +4,7 @@ import type { BackupData } from './logic/backup';
 import { daysLeft } from './logic/expiry';
 import { templateFromItem, templateKey } from './logic/drafts';
 import type { ModelPauses } from './logic/gemini';
+import { parseFirebaseConfig, type HouseInfo, type Shadow } from './logic/house';
 import type { Meal } from './logic/meals';
 import { sanitizeRecipe, type Recipe } from './logic/recipes';
 import { defaultSettings, sanitizeSettings } from './logic/settings';
@@ -30,6 +31,42 @@ export async function getAiKey(db: PantryDB): Promise<string> {
 export async function setAiKey(db: PantryDB, key: string): Promise<void> {
   if (key.trim()) await db.kv.put({ key: 'geminiKey', value: key.trim() });
   else await db.kv.delete('geminiKey');
+}
+
+// ---------- Casa condivisa (fuori dai backup, come la chiave di Gemini) ----------
+
+export async function getHouse(db: PantryDB): Promise<HouseInfo | null> {
+  const v = (await db.kv.get('house'))?.value as Partial<HouseInfo> | undefined;
+  if (!v || typeof v !== 'object' || typeof v.houseId !== 'string' || typeof v.code !== 'string' || !v.firebase) return null;
+  const firebase = parseFirebaseConfig(JSON.stringify(v.firebase));
+  if (!firebase) return null;
+  return { firebase: { ...firebase, appId: typeof v.firebase.appId === 'string' ? v.firebase.appId : firebase.appId }, houseId: v.houseId, code: v.code, name: typeof v.name === 'string' ? v.name : '' };
+}
+
+export async function saveHouse(db: PantryDB, info: HouseInfo): Promise<void> {
+  await db.kv.put({ key: 'house', value: JSON.parse(JSON.stringify(info)) as unknown });
+}
+
+/** Esce dalla casa: il telefono tiene i dati, ma non si aggiornano più. */
+export async function clearHouse(db: PantryDB): Promise<void> {
+  await db.kv.bulkDelete(['house', 'houseShadow']);
+}
+
+export async function getHouseShadow(db: PantryDB): Promise<Shadow> {
+  const v = (await db.kv.get('houseShadow'))?.value;
+  if (!v || typeof v !== 'object') return {};
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'));
+}
+
+export async function saveHouseShadow(db: PantryDB, shadow: Shadow): Promise<void> {
+  await db.kv.put({ key: 'houseShadow', value: { ...shadow } });
+}
+
+/** Toglie dal telefono dispensa, spesa e pasti (entrando in una casa con "Tieni solo quelli della casa"). */
+export async function clearSharedData(db: PantryDB): Promise<void> {
+  await db.transaction('rw', [db.items, db.shopping, db.meals, db.kv], async () => {
+    await Promise.all([db.items.clear(), db.shopping.clear(), db.meals.clear(), db.kv.delete('houseShadow')]);
+  });
 }
 
 /** Modelli di Gemini messi in pausa (limite gratuito raggiunto o modello inesistente) e fino a quando. */

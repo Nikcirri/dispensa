@@ -8,6 +8,7 @@
   import { onWidgetAction } from './lib/services/widgets';
   import { app, closeAllSheets, initApp, refreshAll, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
   import { showToast } from './lib/state/ui.svelte';
+  import { initHouse, resumeHouse } from './lib/state/house.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay } from './lib/state/ui.svelte';
   import BusyOverlay from './lib/ui/BusyOverlay.svelte';
@@ -81,6 +82,8 @@
     initApp()
       .then(async () => {
         preloadAll();
+        // Casa condivisa: si ricollega in sottofondo (Firebase si carica solo se il telefono è in una casa).
+        void initHouse().catch((e: unknown) => console.warn('Casa condivisa non collegata', e));
         // Notifica "scade oggi": si apre la scheda delle ricette (anche se l'app era chiusa: Android tiene il tocco).
         onNotificationTap(() => {
           if (!app.settings.onboarded) return;
@@ -113,6 +116,7 @@
       if (app.settings.onboarded) {
         void refreshUpdate();
         scheduleNotifications();
+        resumeHouse();
       }
     });
     return repeatInForeground(tickToday, 30_000);
@@ -211,6 +215,7 @@
   <!-- In ordine: quelli che si aprono sopra gli altri vengono dopo (un pasto apre la ricetta, la ricetta apre "Quando la cucini?"). -->
   {#if sheets.settings}{#await load.settings() then m}<m.default />{/await}{/if}
   {#if sheets.stats}{#await load.stats() then m}<m.default />{/await}{/if}
+  {#if sheets.house}{#await load.house() then m}<m.default />{/await}{/if}
   {#if sheets.planAi}{#await load.planAi() then m}<m.default />{/await}{/if}
   {#if sheets.meal}{#await load.meal() then m}<m.default request={sheets.meal} />{/await}{/if}
   {#if sheets.recipe}{#await load.recipe() then m}<m.default recipe={sheets.recipe} />{/await}{/if}

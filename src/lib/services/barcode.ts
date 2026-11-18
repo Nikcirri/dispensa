@@ -45,15 +45,21 @@ async function ensureScannerModule(onInstalling: () => void): Promise<void> {
 
 /** Apre lo scanner. Restituisce il codice letto, oppure null se l'utente chiude. */
 export async function scanBarcode(onInstalling: () => void = () => undefined): Promise<string | null> {
-  if (!isNative()) throw new UserError('Lo scanner funziona solo nell’app Android. Puoi scrivere il codice a mano.');
+  return scan([BarcodeFormat.Ean13, BarcodeFormat.Ean8, BarcodeFormat.UpcA, BarcodeFormat.UpcE], onInstalling);
+}
+
+/** Inquadra un codice QR (l'invito della casa condivisa mostrato sull'altro telefono). */
+export async function scanQrCode(onInstalling: () => void = () => undefined): Promise<string | null> {
+  return scan([BarcodeFormat.QrCode], onInstalling, 'Lo scanner funziona solo nell’app Android: incolla il messaggio dell’invito.');
+}
+
+async function scan(formats: BarcodeFormat[], onInstalling: () => void, webText = 'Lo scanner funziona solo nell’app Android. Puoi scrivere il codice a mano.'): Promise<string | null> {
+  if (!isNative()) throw new UserError(webText);
   const { supported } = await BarcodeScanner.isSupported();
-  if (!supported) throw new UserError('Questo telefono non supporta lo scanner di Google. Puoi scrivere il codice a mano.');
+  if (!supported) throw new UserError('Questo telefono non supporta lo scanner di Google.');
   await ensureScannerModule(onInstalling);
   try {
-    const { barcodes } = await BarcodeScanner.scan({
-      formats: [BarcodeFormat.Ean13, BarcodeFormat.Ean8, BarcodeFormat.UpcA, BarcodeFormat.UpcE],
-      autoZoom: true,
-    });
+    const { barcodes } = await BarcodeScanner.scan({ formats, autoZoom: true });
     const code = barcodes.find((b) => b.rawValue)?.rawValue?.trim();
     return code || null;
   } catch (e) {
