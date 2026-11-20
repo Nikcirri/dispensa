@@ -8,7 +8,7 @@
   import { formatQuantity } from '../../lib/logic/foods';
   import { plannedMealOf, whenText } from '../../lib/logic/meals';
   import { liveRecipe } from '../../lib/logic/match';
-  import { leftoverAfter } from '../../lib/logic/recipes';
+  import { cookedDefault, scaleAmount } from '../../lib/logic/recipes';
   import { capitalize, plural } from '../../lib/logic/text';
   import { tapFeedback } from '../../lib/platform';
   import { removeItem, updateItem } from '../../lib/repo';
@@ -31,17 +31,25 @@
   type Choice = 'finito' | 'resta' | 'no';
   interface Row {
     item: Item;
-    /** Quanto ne è stato usato (dalla ricetta), es. "4" o "200 g". */
+    /** Quantità della ricetta (per le persone della ricetta). */
+    base: string;
+    /** Quanto ne è stato usato per le persone scelte, es. "3" o "150 g". */
     amount: string;
     /** Quanti ne restano se si sceglie "Ne resta" (null: si segna solo come aperto). */
     left: number | null;
     choice: Choice;
+    /** La scelta l'ha cambiata chi usa l'app: cambiando le persone non si tocca. */
+    touched: boolean;
   }
 
-  function row(item: Item, amount: string): Row {
-    const left = leftoverAfter(item, amount);
-    // Usato solo in parte (es. 4 uova su 6): di partenza "Ne resta".
-    return { item, amount, left, choice: left !== null ? 'resta' : 'finito' };
+  // Per quante persone è la ricetta, e per quante è stata cucinata davvero (si può cambiare).
+  const recipeServings = Math.min(20, Math.max(1, req.recipe?.servings ?? 2));
+  let people = $state(recipeServings);
+
+  function row(item: Item, base: string, factor = 1): Row {
+    const amount = scaleAmount(base, factor);
+    // Usato solo in parte (es. 4 uova su 6, 240 g su 500): di partenza "Ne resta".
+    return { item, base, amount, ...cookedDefault(item, amount), touched: false };
   }
 
   let rows = $state<Row[]>(
@@ -54,6 +62,29 @@
         .filter((r): r is Row => r !== null),
     ),
   );
+  const fromRecipe = $derived(rows.some((r) => r.base));
+
+  /** Cambia le persone: le quantità usate (e quanto resta) si ricalcolano. */
+  function setPeople(n: number) {
+    const next = Math.min(20, Math.max(1, n));
+    if (next === people) return;
+    people = next;
+    void tapFeedback();
+    const factor = next / recipeServings;
+    rows = rows.map((r) => {
+      if (!r.base) return r;
+      const amount = scaleAmount(r.base, factor);
+      const d = cookedDefault(r.item, amount);
+      return { ...r, amount, left: d.left, choice: r.touched ? (r.choice === 'resta' && d.left === null && d.choice === 'finito' ? 'finito' : r.choice) : d.choice };
+    });
+  }
+
+  function choose(i: number, c: Choice) {
+    const r = rows[i];
+    if (!r) return;
+    r.choice = c;
+    r.touched = true;
+  }
   let picking = $state(untrack(() => rows.length === 0 && app.items.length > 0));
   let saving = $state(false);
 
@@ -127,6 +158,20 @@
       </span>
     </div>
 
+    {#if req.recipe && fromRecipe}
+      <div class="people">
+        <span class="people-text">Per quante persone l’hai cucinato?</span>
+        <div class="servings" aria-label="Persone">
+          <button aria-label="Una persona in meno" disabled={people <= 1} onclick={() => setPeople(people - 1)}><Icon name="minus" size={18} /></button>
+          <span class="num">👥 {people}</span>
+          <button aria-label="Una persona in più" disabled={people >= 20} onclick={() => setPeople(people + 1)}><Icon name="plus" size={18} /></button>
+        </div>
+        {#if people !== recipeServings}
+          <span class="people-note">La ricetta era per {plural(recipeServings, 'persona', 'persone')}: ho ricalcolato quanto hai usato.</span>
+        {/if}
+      </div>
+    {/if}
+
     {#if rows.length}
       <p class="lead">Aggiorno la dispensa: cosa è rimasto dei prodotti usati?</p>
       <ul class="list">
@@ -141,9 +186,9 @@
               <ExpiryBadge days={daysLeft(r.item, app.today)} kind={r.item.expiryKind} estimated={r.item.expiryEstimated} />
             </div>
             <div class="segmented">
-              <button aria-pressed={r.choice === 'finito'} onclick={() => (rows[i]!.choice = 'finito')}>Finito</button>
-              <button aria-pressed={r.choice === 'resta'} onclick={() => (rows[i]!.choice = 'resta')}>{leftText(r)}</button>
-              <button aria-pressed={r.choice === 'no'} onclick={() => (rows[i]!.choice = 'no')}>Non usato</button>
+              <button aria-pressed={r.choice === 'finito'} onclick={() => choose(i, 'finito')}>Finito</button>
+              <button aria-pressed={r.choice === 'resta'} onclick={() => choose(i, 'resta')}>{leftText(r)}</button>
+              <button aria-pressed={r.choice === 'no'} onclick={() => choose(i, 'no')}>Non usato</button>
             </div>
           </li>
         {/each}
@@ -206,6 +251,59 @@
   .lead {
     margin: 0;
     line-height: 1.5;
+  }
+  .people {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: var(--surface-2);
+  }
+  .people-text {
+    font-weight: 650;
+    flex: 1 1 160px;
+    min-width: 0;
+    line-height: 1.35;
+  }
+  .servings {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    flex: none;
+  }
+  .servings button {
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: inherit;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .servings button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .servings .num {
+    min-width: 52px;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .people-note {
+    flex-basis: 100%;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.4;
   }
   .note {
     margin: 0;

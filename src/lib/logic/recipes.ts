@@ -433,13 +433,118 @@ export function buildUserRecipe(f: UserRecipeFields, nowIso: string): Recipe {
   };
 }
 
-/** Quanti ne restano dopo averne usati (solo per pezzi e confezioni, se la quantità usata è un numero chiaro). */
-export function leftoverAfter(item: Pick<Item, 'quantity' | 'unit'>, amount: string): number | null {
-  if (item.unit !== 'pz' && item.unit !== 'conf') return null;
-  const m = /^\s*(\d+)(?![\d.,])(?!\s*(?:g|gr|kg|ml|cl|l)\b)/i.exec(amount);
+// ---------- Quantità usate: per quante persone, quanto resta ----------
+
+const FRACTIONS: Record<string, number> = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3 };
+
+/** Il numero all'inizio di una quantità ("200 g", "1,5 l", "1/2 cipolla", "½ limone", "2-3 foglie" → 2). */
+function leadingNumber(amount: string): { value: number; rest: string } | null {
+  const m = /^\s*(?:(\d+)\s*\/\s*(\d+)|(\d+(?:[.,]\d+)?)\s*([½¼¾⅓⅔])?|([½¼¾⅓⅔]))(?:\s*-\s*\d+(?:[.,]\d+)?)?\s*(.*)$/.exec(amount);
   if (!m) return null;
-  const used = Number(m[1]);
-  return used > 0 && used < item.quantity ? item.quantity - used : null;
+  let value: number;
+  if (m[1] && m[2]) value = Number(m[1]) / Number(m[2]);
+  else if (m[3]) value = Number(m[3].replace(',', '.')) + (m[4] ? FRACTIONS[m[4]]! : 0);
+  else value = FRACTIONS[m[5]!]!;
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return { value, rest: m[6] ?? '' };
+}
+
+type Measure = 'g' | 'ml';
+
+/** Unità di peso o volume all'inizio del resto ("g di farina" → g ×1, "kg" → g ×1000). */
+function measureOf(rest: string): { measure: Measure; factor: number; unit: string } | null {
+  const m = /^(kg|chili|chilo|g|gr|grammi|grammo|l|lt|litri|litro|dl|cl|ml)\b\.?/i.exec(rest);
+  if (!m) return null;
+  const u = m[1]!.toLowerCase();
+  if (u === 'kg' || u === 'chili' || u === 'chilo') return { measure: 'g', factor: 1000, unit: m[1]! };
+  if (u.startsWith('g')) return { measure: 'g', factor: 1, unit: m[1]! };
+  if (u === 'ml') return { measure: 'ml', factor: 1, unit: m[1]! };
+  if (u === 'cl') return { measure: 'ml', factor: 10, unit: m[1]! };
+  if (u === 'dl') return { measure: 'ml', factor: 100, unit: m[1]! };
+  return { measure: 'ml', factor: 1000, unit: m[1]! };
+}
+
+function itemMeasure(unit: Item['unit']): { measure: Measure | 'pezzi'; factor: number } {
+  if (unit === 'g') return { measure: 'g', factor: 1 };
+  if (unit === 'kg') return { measure: 'g', factor: 1000 };
+  if (unit === 'ml') return { measure: 'ml', factor: 1 };
+  if (unit === 'l') return { measure: 'ml', factor: 1000 };
+  return { measure: 'pezzi', factor: 1 };
+}
+
+function itNumber(n: number): string {
+  return n.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+}
+
+/** Arrotonda un numero di pezzi o cucchiai: a mezzi, mai sotto ½. */
+function roundPieces(v: number): string {
+  const half = Math.max(0.5, Math.round(v * 2) / 2);
+  if (half === 0.5) return '½';
+  return Number.isInteger(half) ? String(half) : `${Math.floor(half)}½`;
+}
+
+/** Arrotonda grammi o millilitri a cifre tonde (5 o 10), come in una ricetta. */
+function roundMeasure(v: number): number {
+  if (v >= 100) return Math.round(v / 10) * 10;
+  if (v >= 20) return Math.round(v / 5) * 5;
+  return Math.max(1, Math.round(v));
+}
+
+/**
+ * La quantità di un ingrediente per un altro numero di persone ("200 g" per 4 → "150 g" per 3).
+ * Quello che non ha un numero ("q.b.", "un filo") resta com'è.
+ */
+export function scaleAmount(amount: string, factor: number): string {
+  if (!Number.isFinite(factor) || factor <= 0 || Math.abs(factor - 1) < 1e-9) return amount;
+  const n = leadingNumber(amount);
+  if (!n) return amount;
+  const v = n.value * factor;
+  const measure = measureOf(n.rest);
+  if (measure) {
+    if (measure.factor >= 1000) {
+      // kg e litri: sotto 1 si scrive in g o ml, così si legge meglio ("0,75 kg" → "750 g").
+      const base = v * measure.factor;
+      if (base < 1000) return `${roundMeasure(base)} ${measure.measure === 'g' ? 'g' : 'ml'}${n.rest.slice(measure.unit.length)}`;
+      return `${itNumber(Math.round(v * 100) / 100)} ${n.rest}`;
+    }
+    return `${roundMeasure(v)} ${n.rest}`.trim();
+  }
+  return `${roundPieces(v)}${n.rest ? ` ${n.rest}` : ''}`;
+}
+
+/** Quanto è stato usato, nell'unità del prodotto (null se non si capisce, es. "q.b." o grammi di un prodotto a pezzi). */
+export function usedAmount(item: Pick<Item, 'unit'>, amount: string): number | null {
+  const n = leadingNumber(amount);
+  if (!n) return null;
+  const im = itemMeasure(item.unit);
+  const measure = measureOf(n.rest);
+  if (im.measure === 'pezzi') {
+    // Pezzi e confezioni: solo un numero intero di pezzi ("4", "2 uova", "1 confezione").
+    if (measure || !Number.isInteger(n.value) || /^\s*\d+[.,]/.test(amount)) return null;
+    return n.value;
+  }
+  if (!measure || measure.measure !== im.measure) return null;
+  return (n.value * measure.factor) / im.factor;
+}
+
+/** Quanti ne restano dopo averne usati (pezzi, confezioni, grammi e millilitri; null se non si capisce o se è finito). */
+export function leftoverAfter(item: Pick<Item, 'quantity' | 'unit'>, amount: string): number | null {
+  const used = usedAmount(item, amount);
+  if (used === null) return null;
+  const left = Math.round((item.quantity - used) * 100) / 100;
+  return used > 0 && left > 0 ? left : null;
+}
+
+/**
+ * Cosa proporre dopo aver cucinato: "Ne resta" (con quanto) se se n'è usato solo una parte o la quantità non è un numero
+ * ("q.b.": il prodotto si segna aperto), "Finito" se è stato usato tutto o non si sa quanto ne resta.
+ */
+export function cookedDefault(item: Pick<Item, 'quantity' | 'unit'>, amount: string): { choice: 'finito' | 'resta'; left: number | null } {
+  const left = leftoverAfter(item, amount);
+  if (left !== null) return { choice: 'resta', left };
+  const text = amount.trim();
+  if (text && !/\d|[½¼¾⅓⅔]/.test(text)) return { choice: 'resta', left: null };
+  return { choice: 'finito', left: null };
 }
 
 export interface UseStatus extends RecipeUse {

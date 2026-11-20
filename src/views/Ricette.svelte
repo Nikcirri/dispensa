@@ -8,7 +8,7 @@
   import { groupRecipes, onlyExpiringMessage, recipeWaitingMessage, type RecipeFilters } from '../lib/logic/recipes';
   import { tapFeedback } from '../lib/platform';
   import { app, hasAiKey, sheets } from '../lib/state/app.svelte';
-  import { generateRecipes, loadRecipes, recipes, rememberFilters } from '../lib/state/recipes.svelte';
+  import { clearIdeas, generateRecipes, loadRecipes, recipes, rememberFilters } from '../lib/state/recipes.svelte';
   import { showToast } from '../lib/state/ui.svelte';
   import AiStatus from '../lib/ui/AiStatus.svelte';
   import Icon from '../lib/ui/Icon.svelte';
@@ -206,6 +206,10 @@
 {#if !recipes.loading && list.length}
   <div bind:this={resultsEl} class="anchor"></div>
   {#if recipes.view === 'nuove'}
+    <div class="ideas-head">
+      <span>{recipes.list.length === 1 ? 'L’ultima idea' : `Le ultime ${recipes.list.length} idee`}</span>
+      <button class="btn btn-ghost btn-small clear" onclick={() => void clearIdeas()}><Icon name="trash" size={18} /> Cancella</button>
+    </div>
     {#if splitMessage || recipes.note}
       <div class="ai-note" in:fade>
         <span aria-hidden="true">💬</span>
@@ -252,6 +256,20 @@
 <style>
   .newrec {
     margin-bottom: 14px;
+  }
+  .ideas-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 22px 2px 4px;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .clear {
+    flex: none;
+    color: var(--text-muted);
   }
   .views {
     flex: none;

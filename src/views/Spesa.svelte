@@ -9,7 +9,7 @@
   import { formatQuantity } from '../lib/logic/foods';
   import { findInPantry } from '../lib/logic/match';
   import { shoppingForMeals } from '../lib/logic/meals';
-  import { shoppingShareText, sortShopping, splitNames } from '../lib/logic/shopping';
+  import { detailText, pantryNamesFor, shoppingShareText, sortShopping, splitNames } from '../lib/logic/shopping';
   import { normalize, plural } from '../lib/logic/text';
   import { isNative, tapFeedback } from '../lib/platform';
   import { addShopping, deleteShopping, updateShopping } from '../lib/repo';
@@ -92,12 +92,17 @@
     });
   }
 
-  /** I prodotti comprati vanno in dispensa: si controllano dove vanno e le date. */
+  /** I prodotti comprati vanno in dispensa: si controllano dove vanno e le date. Con le specifiche, uno per ognuna. */
   function moveToPantry() {
-    const drafts: ProductDraft[] = done.map((s) => {
-      const t = app.templates.find((x) => x.key === templateKey({ name: s.name }) || normalize(x.name) === normalize(s.name));
-      return t ? { ...draftFromTemplate(t, app.today), source: 'spesa' as const } : draftFromName(s.name, app.today, 'spesa');
-    });
+    const drafts: ProductDraft[] = done.flatMap((s) =>
+      pantryNamesFor(s).map(({ name, qty }) => {
+        const t = app.templates.find((x) => x.key === templateKey({ name }) || normalize(x.name) === normalize(name));
+        const d = t ? { ...draftFromTemplate(t, app.today), source: 'spesa' as const } : draftFromName(name, app.today, 'spesa');
+        if (qty <= 1) return d;
+        // 2 confezioni: 2 pezzi; se il prodotto si conta a peso (es. 500 g), il doppio del peso.
+        return { ...d, quantity: d.unit === 'pz' || d.unit === 'conf' ? qty : d.quantity * qty };
+      }),
+    );
     if (!drafts.length) return;
     sheets.multi = { drafts, note: '', kind: 'spesa', shoppingIds: done.map((s) => s.id) };
   }
@@ -175,15 +180,23 @@
         <li animate:flip={{ duration: 200 }}>
           <button class="tick" aria-label="Preso: {s.name}" onclick={() => void toggle(s)}></button>
           <span class="emoji" aria-hidden="true">{s.emoji}</span>
-          <span class="grow">
+          <button class="grow open" aria-label="Specifiche di {s.name}" onclick={() => (sheets.shoppingItem = s.id)}>
             <span class="title">{s.name}</span>
             {#if s.note}<span class="sub">{s.note}</span>{/if}
+            {#if s.details?.length}
+              <span class="details">
+                {#each s.details as d, k (k)}<span class="detail">{detailText(d)}</span>{/each}
+              </span>
+            {/if}
             {#if haveText(s.name)}<span class="have">🏠 {haveText(s.name)}</span>{/if}
-          </span>
+          </button>
           <button class="icon-btn" aria-label="Togli {s.name}" onclick={() => void remove(s)}><Icon name="close" size={20} /></button>
         </li>
       {/each}
     </ul>
+    {#if !app.shopping.some((x) => x.details?.length)}
+      <p class="tip">Tocca un prodotto per aggiungere le specifiche (es. che tipo di pasta e quanti pacchi).</p>
+    {/if}
   {:else if !done.length}
     <div class="empty">
       <div class="big" aria-hidden="true">🛒</div>
@@ -200,7 +213,14 @@
         <li class="done" animate:flip={{ duration: 200 }}>
           <button class="tick on" aria-label="Rimetti da comprare: {s.name}" onclick={() => void toggle(s)}><Icon name="check" size={18} stroke={3} /></button>
           <span class="emoji" aria-hidden="true">{s.emoji}</span>
-          <span class="grow"><span class="title">{s.name}</span></span>
+          <button class="grow open" aria-label="Specifiche di {s.name}" onclick={() => (sheets.shoppingItem = s.id)}>
+            <span class="title">{s.name}</span>
+            {#if s.details?.length}
+              <span class="details">
+                {#each s.details as d, k (k)}<span class="detail">{detailText(d)}</span>{/each}
+              </span>
+            {/if}
+          </button>
         </li>
       {/each}
     </ul>
@@ -266,6 +286,44 @@
   }
   .receipt .grow span {
     font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .open {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    padding: 6px 0;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+  }
+  .open .title {
+    overflow-wrap: anywhere;
+  }
+  .details {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 2px;
+  }
+  .detail {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .detail::before {
+    content: '– ';
+  }
+  .tip {
+    margin: -4px 4px 0;
+    font-size: 0.8125rem;
     color: var(--text-muted);
     line-height: 1.4;
   }

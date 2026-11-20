@@ -106,6 +106,8 @@ export const sheets = $state({
   meal: null as MealRequest | null,
   plan: null as PlanRequest | null,
   planAi: false,
+  /** Specifiche di un prodotto della lista della spesa (id). */
+  shoppingItem: null as string | null,
   /** Casa condivisa (`join`: si apre già su "Ho un invito"). */
   house: null as null | 'main' | 'join',
 });
@@ -125,6 +127,7 @@ export function closeAllSheets(): void {
   sheets.plan = null;
   sheets.planAi = false;
   sheets.house = null;
+  sheets.shoppingItem = null;
 }
 
 export function anySheetOpen(): boolean {
@@ -140,7 +143,8 @@ export function anySheetOpen(): boolean {
     sheets.meal ||
     sheets.plan ||
     sheets.planAi ||
-    sheets.house
+    sheets.house ||
+    sheets.shoppingItem
   );
 }
 

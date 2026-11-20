@@ -9,7 +9,8 @@ import { planExpiryNotifications } from './notify';
 import { parseProductResponse } from './off';
 import { filterItems, findMergeTarget, groupByUrgency, itemsToUseFirst, mergeItems, mostWasted, monthStats, sortItems, summarize } from './pantry';
 import { defaultSettings, sanitizeSettings } from './settings';
-import { addToList, shoppingShareText, sortShopping, splitNames } from './shopping';
+import { addToList, cleanDetails, detailText, pantryNamesFor, shoppingShareText, sortShopping, splitNames } from './shopping';
+import { sanitizeShopping } from './backup';
 import { joinNames, matchesQuery, normalize } from './text';
 
 const TODAY = '2026-11-15';
@@ -200,6 +201,30 @@ describe('spesa', () => {
     expect(again.item.order).toBeLessThan(b.order);
     expect(sortShopping([{ ...a, done: true }, b]).map((x) => x.name)).toEqual(['Pane', 'Latte']);
     expect(shoppingShareText([b])).toBe('🛒 Lista della spesa\n• Pane (2)');
+  });
+  it('specifiche: “Pasta” con 2 × penne e 1 × spaghetti integrali', () => {
+    const pasta = { ...addToList([], 'pasta', '', 'x').item, details: cleanDetails([{ text: ' penne  rigate ', qty: 2 }, { text: 'spaghetti integrali' }, { text: '   ' }, { text: 'x', qty: 500 }]) };
+    expect(pasta.details).toEqual([
+      { text: 'penne rigate', qty: 2 },
+      { text: 'spaghetti integrali', qty: 1 },
+      { text: 'x', qty: 99 },
+    ]);
+    expect(detailText(pasta.details[0]!)).toBe('2 × penne rigate');
+    expect(detailText(pasta.details[1]!)).toBe('spaghetti integrali');
+    const two = { ...pasta, details: pasta.details.slice(0, 2) };
+    expect(shoppingShareText([two])).toBe('🛒 Lista della spesa\n• Pasta\n   – 2 × penne rigate\n   – spaghetti integrali');
+    // In dispensa: un prodotto per specifica (il nome non si ripete se c'è già).
+    expect(pantryNamesFor(two)).toEqual([
+      { name: 'Pasta penne rigate', qty: 2 },
+      { name: 'Pasta spaghetti integrali', qty: 1 },
+    ]);
+    expect(pantryNamesFor({ name: 'Pasta', details: [{ text: 'pasta all’uovo', qty: 1 }] })).toEqual([{ name: 'Pasta all’uovo', qty: 1 }]);
+    expect(pantryNamesFor({ name: 'Latte' })).toEqual([{ name: 'Latte', qty: 1 }]);
+    // Il backup (e la casa condivisa) tengono le specifiche; senza specifiche il campo non c'è.
+    expect(sanitizeShopping(JSON.parse(JSON.stringify(two)))?.details).toEqual(two.details);
+    expect('details' in sanitizeShopping({ ...two, details: [] })!).toBe(false);
+    // Rimettendo in lista un prodotto che c'è già, le specifiche restano.
+    expect(addToList([two], 'Pasta').item.details).toEqual(two.details);
   });
   it('più nomi insieme', () => {
     expect(splitNames('latte, pane e uova')).toEqual(['latte', 'pane', 'uova']);

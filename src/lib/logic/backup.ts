@@ -1,5 +1,6 @@
 // Backup: tutti i dati in un file JSON da salvare dove si vuole (Drive, email, WhatsApp…).
 // La chiave di Gemini NON va nel backup.
+import { cleanDetails } from './shopping';
 import type { HistoryEntry, Item, Settings, ShoppingItem, Template } from '../types';
 import { isDateKey } from './dates';
 import { isUnit } from './foods';
@@ -81,6 +82,12 @@ function sanitizeHistory(v: unknown): HistoryEntry | null {
   };
 }
 
+/** Le specifiche di un prodotto della spesa: il campo c'è solo se ce n'è almeno una (così i dati restano uguali tra i telefoni). */
+function withDetails(v: unknown): Pick<ShoppingItem, 'details'> {
+  const details = cleanDetails(v);
+  return details.length ? { details } : {};
+}
+
 export function sanitizeShopping(v: unknown): ShoppingItem | null {
   if (!isObj(v) || !isStr(v.id) || !isStr(v.name)) return null;
   return {
@@ -91,6 +98,7 @@ export function sanitizeShopping(v: unknown): ShoppingItem | null {
     done: v.done === true,
     addedAt: isStr(v.addedAt) ? v.addedAt : new Date().toISOString(),
     order: isNum(v.order) ? v.order : 0,
+    ...withDetails(v.details),
   };
 }
 

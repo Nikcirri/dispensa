@@ -62,6 +62,12 @@ export interface HistoryEntry {
   wasExpired: boolean;
 }
 
+/** Una specifica di un prodotto della spesa, es. 2 × "penne rigate". */
+export interface ShoppingDetail {
+  text: string;
+  qty: number;
+}
+
 export interface ShoppingItem {
   id: string;
   name: string;
@@ -72,6 +78,8 @@ export interface ShoppingItem {
   addedAt: string;
   /** Ordine nella lista (più piccolo = più in alto). */
   order: number;
+  /** Specifiche (che tipo, quanti): assenti se non ce ne sono. */
+  details?: ShoppingDetail[];
 }
 
 /** Prodotto ricordato: per riaggiungerlo con un tocco e riconoscere subito il suo codice a barre. */

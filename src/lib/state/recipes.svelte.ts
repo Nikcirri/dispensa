@@ -8,7 +8,7 @@ import { getLastRecipes, getLastRecipesNote, saveRecipe, savedRecipes, setLastRe
 import { suggestRecipes, writeSteps } from '../services/ai';
 import { AiError } from '../services/gemini';
 import { app, reloadMeals, sheets, updateSettings } from './app.svelte';
-import { showToast } from './ui.svelte';
+import { showToast, showUndoToast } from './ui.svelte';
 
 export const recipes = $state({
   loaded: false,
@@ -93,6 +93,37 @@ export async function generateRecipes(more = false): Promise<void> {
     recipes.loading = false;
     recipes.progress = null;
   }
+}
+
+/** Cancella le idee proposte (quelle salvate col ❤️ e i pasti del piano restano). Si può annullare. */
+export async function clearIdeas(): Promise<void> {
+  if (!recipes.list.length) return;
+  const before = {
+    list: $state.snapshot(recipes.list) as Recipe[],
+    note: recipes.note,
+    askedOnlyExpiring: recipes.askedOnlyExpiring,
+    usedModel: recipes.usedModel,
+    usedSeconds: recipes.usedSeconds,
+    detail: recipes.detail,
+  };
+  recipes.list = [];
+  recipes.note = '';
+  recipes.askedOnlyExpiring = false;
+  recipes.usedModel = '';
+  recipes.usedSeconds = 0;
+  recipes.detail = '';
+  recipes.error = null;
+  await setLastRecipes(db, []);
+  void tapFeedback();
+  showUndoToast('Idee cancellate (le ricette salvate ❤️ restano)', async () => {
+    recipes.list = before.list;
+    recipes.note = before.note;
+    recipes.askedOnlyExpiring = before.askedOnlyExpiring;
+    recipes.usedModel = before.usedModel;
+    recipes.usedSeconds = before.usedSeconds;
+    recipes.detail = before.detail;
+    await setLastRecipes(db, before.list, { text: before.note, onlyExpiring: before.askedOnlyExpiring });
+  });
 }
 
 export function isSaved(id: string): boolean {

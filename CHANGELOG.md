@@ -1,5 +1,13 @@
 # Novità
 
+## [1.5.0] - 2026-11-20
+
+- Spesa: tocca un prodotto per aggiungere le specifiche, es. Pasta → 2 × penne, 1 × spaghetti integrali.
+- "L'ho cucinato": scegli per quante persone; le quantità tolte dalla dispensa si ricalcolano da sole.
+- Ricette: nuovo tasto "Cancella" per togliere le idee proposte (le ricette salvate ❤️ restano).
+- Con "Metti in dispensa" ogni specifica diventa un prodotto (es. 2 di "Pasta penne").
+- Dopo aver cucinato, pasta, latte e simili scalano i grammi usati; olio e sale "q.b." restano (segnati aperti).
+
 ## [1.4.0] - 2026-11-18
 
 - Nuovo: casa condivisa. Tu e chi vive con te vedete la stessa dispensa, la stessa spesa e gli stessi pasti.

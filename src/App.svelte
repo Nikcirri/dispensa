@@ -223,6 +223,7 @@
   {#if sheets.plan}{#await load.plan() then m}<m.default request={sheets.plan} />{/await}{/if}
   {#if sheets.editRecipe}{#await load.editRecipe() then m}<m.default request={sheets.editRecipe} />{/await}{/if}
   {#if sheets.product}{#await load.product() then m}<m.default request={sheets.product} />{/await}{/if}
+  {#if sheets.shoppingItem}{#await load.shoppingItem() then m}<m.default id={sheets.shoppingItem} />{/await}{/if}
   {#if sheets.multi}{#await load.multi() then m}<m.default request={sheets.multi} />{/await}{/if}
   {#if sheets.cooked}{#await load.cooked() then m}<m.default request={sheets.cooked} />{/await}{/if}
   {#if sheets.aiKey}{#await load.aiKey() then m}<m.default />{/await}{/if}

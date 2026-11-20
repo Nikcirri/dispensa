@@ -6,6 +6,8 @@ import {
   buildUserRecipe,
   fixTitle,
   leftoverAfter,
+  cookedDefault,
+  scaleAmount,
   parseSteps,
   STEPS_SCHEMA,
   stepsFromText,
@@ -268,7 +270,32 @@ describe('ricette tue e procedimento scritto dopo', () => {
     expect(leftoverAfter({ quantity: 6, unit: 'pz' }, '6')).toBeNull();
     expect(leftoverAfter({ quantity: 2, unit: 'pz' }, '100 g')).toBeNull();
     expect(leftoverAfter({ quantity: 3, unit: 'conf' }, '1 confezione')).toBe(2);
-    expect(leftoverAfter({ quantity: 1, unit: 'l' }, '200 ml')).toBeNull();
+    expect(leftoverAfter({ quantity: 1, unit: 'l' }, '200 ml')).toBe(0.8);
+    expect(leftoverAfter({ quantity: 500, unit: 'g' }, '320 g di spaghetti')).toBe(180);
+    expect(leftoverAfter({ quantity: 1, unit: 'kg' }, '1,2 kg')).toBeNull();
+    expect(leftoverAfter({ quantity: 250, unit: 'ml' }, '2 cucchiai')).toBeNull();
     expect(leftoverAfter({ quantity: 4, unit: 'pz' }, 'metà')).toBeNull();
+  });
+
+  it('quantità per un altro numero di persone', () => {
+    expect(scaleAmount('200 g', 3 / 4)).toBe('150 g');
+    expect(scaleAmount('320 g di spaghetti', 3 / 4)).toBe('240 g di spaghetti');
+    expect(scaleAmount('4', 3 / 4)).toBe('3');
+    expect(scaleAmount('2 uova', 3 / 2)).toBe('3 uova');
+    expect(scaleAmount('1 cipolla', 1 / 2)).toBe('½ cipolla');
+    expect(scaleAmount('1 kg di patate', 3 / 4)).toBe('750 g di patate');
+    expect(scaleAmount('1 l', 2)).toBe('2 l');
+    expect(scaleAmount('1/2 limone', 2)).toBe('1 limone');
+    expect(scaleAmount('q.b.', 2)).toBe('q.b.');
+    expect(scaleAmount('200g', 1)).toBe('200g');
+  });
+
+  it('dopo aver cucinato: finito, ne resta o solo aperto', () => {
+    expect(cookedDefault({ quantity: 6, unit: 'pz' }, '4 uova')).toEqual({ choice: 'resta', left: 2 });
+    expect(cookedDefault({ quantity: 500, unit: 'g' }, scaleAmount('320 g', 3 / 4))).toEqual({ choice: 'resta', left: 260 });
+    expect(cookedDefault({ quantity: 1, unit: 'pz' }, '1 cipolla')).toEqual({ choice: 'finito', left: null });
+    // "q.b." (olio, sale…): il prodotto non si toglie, si segna aperto.
+    expect(cookedDefault({ quantity: 1, unit: 'l' }, 'q.b.')).toEqual({ choice: 'resta', left: null });
+    expect(cookedDefault({ quantity: 1, unit: 'pz' }, '')).toEqual({ choice: 'finito', left: null });
   });
 });
