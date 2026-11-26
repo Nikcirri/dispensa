@@ -472,6 +472,9 @@ def main():
         page.wait_for_selector("text=Aggiornato ✓")
         page.click("nav button:has-text('Pasti')")
         page.wait_for_timeout(300)
+        # Dopo le 21 il piatto va a domani e può finire sotto la barra in basso: prima lo si porta al centro.
+        page.locator("text=Frittata di zucchine e mozzarella").first.evaluate("e => e.scrollIntoView({ block: 'center' })")
+        page.wait_for_timeout(200)
         page.click("text=Frittata di zucchine e mozzarella")
         page.wait_for_selector("text=Apri la ricetta")
         page.wait_for_timeout(300)

@@ -1,5 +1,11 @@
 # Novità
 
+## [1.6.0] - 2026-11-26
+
+- Nuovo widget "Lista della spesa" per la schermata Home, con le specifiche sotto ogni prodotto.
+- Nel widget tocca un prodotto per spuntarlo, anche senza aprire l'app: al supermercato è più veloce.
+- Il + del widget apre la Spesa pronta per scrivere; le spunte arrivano anche alla casa condivisa.
+
 ## [1.5.0] - 2026-11-20
 
 - Spesa: tocca un prodotto per aggiungere le specifiche, es. Pasta → 2 × penne, 1 × spaghetti integrali.
