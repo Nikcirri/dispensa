@@ -1,16 +1,21 @@
 // Collegamento al plugin Android "Widgets" (android/app/src/main/java/.../widgets/WidgetsPlugin.java):
-// - passa ai widget i prodotti da usare presto e i pasti in programma;
+// - passa ai widget i prodotti da usare presto, i pasti in programma e la lista della spesa;
+// - prende le spunte fatte nel widget della spesa;
 // - avvisa quando l'app viene aperta toccando un widget.
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import type { WidgetData } from '../logic/widget';
+import type { WidgetData, WidgetShoppingChange } from '../logic/widget';
 import { isNative } from '../platform';
 
-/** Cosa è stato toccato: il widget dei prodotti, il suo +, oppure il widget dei pasti. */
-export type WidgetAction = 'dispensa' | 'aggiungi' | 'pasti';
+/** Cosa è stato toccato: il widget dei prodotti, il suo +, il widget dei pasti, quello della spesa o il suo +. */
+export type WidgetAction = 'dispensa' | 'aggiungi' | 'pasti' | 'spesa' | 'scrivi-spesa';
+
+const ACTIONS: readonly string[] = ['dispensa', 'aggiungi', 'pasti', 'spesa', 'scrivi-spesa'];
 
 interface WidgetsPlugin {
   setData(data: WidgetData): Promise<void>;
+  takeShoppingChanges(): Promise<{ changes: WidgetShoppingChange[] }>;
   addListener(event: 'widgetAction', handler: (e: { action: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: 'shoppingChanged', handler: () => void): Promise<PluginListenerHandle>;
 }
 
 const Widgets = registerPlugin<WidgetsPlugin>('Widgets');
@@ -28,6 +33,19 @@ export async function pushWidgets(data: WidgetData): Promise<void> {
 export function onWidgetAction(handler: (action: WidgetAction) => void): void {
   if (!isNative()) return;
   void Widgets.addListener('widgetAction', (e) => {
-    if (e.action === 'dispensa' || e.action === 'aggiungi' || e.action === 'pasti') handler(e.action);
+    if (ACTIONS.includes(e.action)) handler(e.action as WidgetAction);
   }).catch(() => undefined);
+}
+
+/** Le spunte fatte nel widget della spesa dall'ultima volta (poi il widget le dimentica: le salva l'app). */
+export async function takeShoppingChanges(): Promise<WidgetShoppingChange[]> {
+  if (!isNative()) return [];
+  const res = await Widgets.takeShoppingChanges();
+  return (res.changes ?? []).filter((c) => typeof c.id === 'string' && typeof c.done === 'boolean');
+}
+
+/** Chiama `handler` quando si spunta qualcosa nel widget della spesa mentre l'app è aperta in sottofondo. */
+export function onWidgetShoppingChanged(handler: () => void): void {
+  if (!isNative()) return;
+  void Widgets.addListener('shoppingChanged', handler).catch(() => undefined);
 }

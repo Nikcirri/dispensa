@@ -38,6 +38,20 @@
     <string name="widget_meals_dinner">🌙</string>
     <string name="widget_meals_empty">Niente in programma: tocca per aggiungere</string>
     <string name="widget_open_meals">Apri il piano dei pasti</string>
+    <string name="widget_shopping_name">Lista della spesa</string>
+    <string name="widget_shopping_desc">La lista della spesa: tocca un prodotto per spuntarlo, il + per scriverne altri.</string>
+    <string name="widget_shopping_title">Spesa</string>
+    <plurals name="widget_shopping_todo">
+        <item quantity="one">%d da comprare</item>
+        <item quantity="other">%d da comprare</item>
+    </plurals>
+    <string name="widget_shopping_all_done">Tutto nel carrello ✓</string>
+    <string name="widget_shopping_more">e altri %d…</string>
+    <string name="widget_shopping_empty">Lista vuota: tocca + per scrivere</string>
+    <string name="widget_shopping_add">Scrivi nella lista della spesa</string>
+    <string name="widget_shopping_tick">Spunta %1$s</string>
+    <string name="widget_shopping_untick">Togli la spunta a %1$s</string>
+    <string name="widget_preview_shopping">2 da comprare</string>
     <string name="widget_open_app">Apri l’app per iniziare</string>
     <string name="widget_preview_urgent">1 da usare subito</string>
     <string name="widget_preview_today">Oggi</string>

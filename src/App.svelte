@@ -5,8 +5,8 @@
   import { repeatInForeground } from './lib/foreground';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
   import { onNotificationTap } from './lib/services/notifications';
-  import { onWidgetAction } from './lib/services/widgets';
-  import { app, closeAllSheets, initApp, refreshAll, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
+  import { onWidgetAction, onWidgetShoppingChanged } from './lib/services/widgets';
+  import { app, applyWidgetShopping, closeAllSheets, initApp, refreshAll, scheduleNotifications, sheets, tickToday, type Tab } from './lib/state/app.svelte';
   import { showToast } from './lib/state/ui.svelte';
   import { initHouse, resumeHouse } from './lib/state/house.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
@@ -95,9 +95,13 @@
         onWidgetAction((action) => {
           if (!app.settings.onboarded) return;
           closeAllSheets();
-          app.tab = action;
+          app.tab = action === 'scrivi-spesa' ? 'spesa' : action;
           main?.scrollTo({ top: 0 });
+          if (action === 'scrivi-spesa') app.focusShopping = true;
         });
+        // Spunte fatte nel widget della spesa: si salvano all'apertura e subito se l'app è aperta in sottofondo.
+        void applyWidgetShopping();
+        onWidgetShoppingChanged(() => void applyWidgetShopping());
         await announceNewVersion().catch(() => undefined);
         if (app.settings.onboarded) await refreshUpdate();
       })
@@ -118,6 +122,7 @@
         void refreshUpdate();
         scheduleNotifications();
         resumeHouse();
+        void applyWidgetShopping();
       }
     });
     return repeatInForeground(tickToday, 30_000);

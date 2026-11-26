@@ -312,7 +312,7 @@ describe('dati dei widget', () => {
     const latte = item({ id: 'l', name: 'Latte', expiry: '2026-11-30', openedAt: '2026-11-17', openDays: 3 });
     const pasta = item({ id: 'p', name: 'Pasta', emoji: '', expiry: null });
     const yogurt = item({ id: 'y', name: 'Yogurt', expiry: '2026-11-19', expiryKind: 'tmc' });
-    const d = widgetData([pasta, latte, yogurt], [mealFromText('pizza', TODAY, 'cena', 'x')], TODAY);
+    const d = widgetData([pasta, latte, yogurt], [mealFromText('pizza', TODAY, 'cena', 'x')], [], TODAY);
     expect(d.products.map((p) => [p.name, p.expiry, p.kind])).toEqual([
       ['Yogurt', '2026-11-19', 'tmc'],
       ['Latte', '2026-11-20', 'scadenza'],

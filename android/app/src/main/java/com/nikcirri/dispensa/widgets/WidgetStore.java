@@ -20,8 +20,11 @@ final class WidgetStore {
 
     private static final String PREFS = "dispensa_widgets";
     private static final String KEY = "data";
+    /** Prodotti della spesa spuntati (o tolti dal carrello) nel widget e non ancora passati all'app: {id: preso}. */
+    private static final String KEY_SHOPPING_PENDING = "shopping_pending";
     static final int MAX_PRODUCTS = 12;
     static final int MAX_MEALS = 40;
+    static final int MAX_SHOPPING = 30;
 
     private WidgetStore() {}
 
@@ -42,12 +45,24 @@ final class WidgetStore {
         boolean done;
     }
 
+    static final class ShopItem {
+        String id;
+        String name;
+        String emoji;
+        /** Specifiche e nota in una riga ("2 × penne · spaghetti"), oppure "". */
+        String details;
+        /** Già nel carrello (dall'app, oppure spuntato nel widget). */
+        boolean done;
+    }
+
     static final class Data {
         /** false finché l'app non ha mai mandato i dati (prima apertura non fatta). */
         boolean known;
         int total;
         final List<Product> products = new ArrayList<>();
         final List<Meal> meals = new ArrayList<>();
+        /** La lista della spesa: prima da comprare, poi nel carrello (con le spunte del widget già applicate). */
+        final List<ShopItem> shopping = new ArrayList<>();
     }
 
     static LocalDate today() {
@@ -117,6 +132,23 @@ final class WidgetStore {
                 m.put(o);
             }
             out.put("meals", m);
+            JSONArray shopping = in.optJSONArray("shopping");
+            JSONArray sh = new JSONArray();
+            for (int i = 0; shopping != null && i < shopping.length() && sh.length() < MAX_SHOPPING; i++) {
+                JSONObject src = shopping.optJSONObject(i);
+                if (src == null) continue;
+                String id = clip(src.optString("id", ""), 80);
+                String name = clip(src.optString("name", ""), 60);
+                if (id.isEmpty() || name.isEmpty()) continue;
+                JSONObject o = new JSONObject();
+                o.put("id", id);
+                o.put("name", name);
+                o.put("emoji", clip(src.optString("emoji", ""), 16));
+                o.put("details", clip(src.optString("details", ""), 160));
+                o.put("done", src.optBoolean("done", false));
+                sh.put(o);
+            }
+            out.put("shopping", sh);
             prefs(context).edit().putString(KEY, out.toString()).apply();
             return true;
         } catch (JSONException e) {
@@ -156,10 +188,62 @@ final class WidgetStore {
                 m.done = o.optBoolean("done", false);
                 data.meals.add(m);
             }
+            JSONObject pending = pendingShopping(context);
+            JSONArray shopping = in.optJSONArray("shopping");
+            for (int i = 0; shopping != null && i < shopping.length(); i++) {
+                JSONObject o = shopping.optJSONObject(i);
+                if (o == null) continue;
+                ShopItem s = new ShopItem();
+                s.id = o.optString("id", "");
+                s.name = o.optString("name", "");
+                s.emoji = o.optString("emoji", "");
+                s.details = o.optString("details", "");
+                s.done = pending.has(s.id) ? pending.optBoolean(s.id) : o.optBoolean("done", false);
+                data.shopping.add(s);
+            }
         } catch (JSONException e) {
             return new Data();
         }
         return data;
+    }
+
+    private static JSONObject pendingShopping(Context context) {
+        String raw = prefs(context).getString(KEY_SHOPPING_PENDING, null);
+        if (raw == null) return new JSONObject();
+        try {
+            return new JSONObject(raw);
+        } catch (JSONException e) {
+            return new JSONObject();
+        }
+    }
+
+    /** Spunta (o toglie la spunta a) un prodotto della spesa dal widget: l'app lo saprà alla prossima apertura. */
+    static synchronized void toggleShopping(Context context, String id) {
+        if (id == null || id.isEmpty()) return;
+        boolean current = false;
+        boolean found = false;
+        for (ShopItem s : load(context).shopping) {
+            if (id.equals(s.id)) {
+                current = s.done;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return;
+        JSONObject pending = pendingShopping(context);
+        try {
+            pending.put(id, !current);
+        } catch (JSONException e) {
+            return;
+        }
+        prefs(context).edit().putString(KEY_SHOPPING_PENDING, pending.toString()).apply();
+    }
+
+    /** Le spunte fatte nel widget, da passare all'app (che le salva): poi si dimenticano. */
+    static synchronized JSONObject takeShoppingPending(Context context) {
+        JSONObject pending = pendingShopping(context);
+        prefs(context).edit().remove(KEY_SHOPPING_PENDING).apply();
+        return pending;
     }
 
     private static SharedPreferences prefs(Context context) {

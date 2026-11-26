@@ -31,6 +31,7 @@ public class WidgetRefreshReceiver extends BroadcastReceiver {
     static void refreshAll(Context context) {
         ProductsWidget.updateAll(context);
         MealsWidget.updateAll(context);
+        ShoppingWidget.updateAll(context);
         scheduleMidnight(context);
     }
 

@@ -7,7 +7,7 @@ import { mealsToRelink, type Meal, type MealSlot } from '../logic/meals';
 import type { Recipe } from '../logic/recipes';
 import { findMergeTarget, mergeItems } from '../logic/pantry';
 import { defaultSettings } from '../logic/settings';
-import { widgetData } from '../logic/widget';
+import { shoppingChangesToApply, widgetData } from '../logic/widget';
 import { tapFeedback } from '../platform';
 import {
   addShopping,
@@ -24,9 +24,10 @@ import {
   saveSettings,
   undoRemoval,
   updateItem,
+  updateShopping,
 } from '../repo';
 import { rescheduleExpiryNotifications } from '../services/notifications';
-import { pushWidgets } from '../services/widgets';
+import { pushWidgets, takeShoppingChanges } from '../services/widgets';
 import type { Item, Outcome, Settings, ShoppingItem, Template } from '../types';
 import { showToast, showUndoToast } from './ui.svelte';
 
@@ -39,6 +40,8 @@ export const app = $state({
   today: todayKey(),
   items: [] as Item[],
   shopping: [] as ShoppingItem[],
+  /** Il + del widget "Spesa": la scheda Spesa mette il cursore nel campo per scrivere (e lo rimette a false). */
+  focusShopping: false,
   templates: [] as Template[],
   /** Piano dei pasti (dagli ultimi mesi in avanti). */
   meals: [] as Meal[],
@@ -211,7 +214,7 @@ export function syncWidgets(): void {
   clearTimeout(widgetTimer);
   widgetTimer = setTimeout(() => {
     if (!app.ready || !app.settings.onboarded) return;
-    const data = widgetData($state.snapshot(app.items) as Item[], $state.snapshot(app.meals) as Meal[], app.today);
+    const data = widgetData($state.snapshot(app.items) as Item[], $state.snapshot(app.meals) as Meal[], $state.snapshot(app.shopping) as ShoppingItem[], app.today);
     const key = JSON.stringify(data);
     if (key === lastWidget) return;
     lastWidget = key;
@@ -261,6 +264,35 @@ export async function reloadItems(reschedule = true): Promise<void> {
 
 export async function reloadShopping(): Promise<void> {
   app.shopping = await allShopping(db);
+  syncWidgets();
+}
+
+let applyingWidget = false;
+
+/**
+ * Salva le spunte fatte nel widget della spesa (all'apertura, al ritorno nell'app e subito se l'app era aperta in sottofondo).
+ * Restituisce quanti prodotti sono cambiati.
+ */
+export async function applyWidgetShopping(): Promise<number> {
+  if (applyingWidget || !app.ready) return 0;
+  applyingWidget = true;
+  try {
+    const changes = await takeShoppingChanges();
+    if (!changes.length) return 0;
+    const list = await allShopping(db);
+    const apply = shoppingChangesToApply(list, changes);
+    for (const c of apply) await updateShopping(db, c.id, { done: c.done });
+    await reloadShopping();
+    // Il widget si rimette in pari anche se non è cambiato niente (le spunte in attesa sono state prese).
+    lastWidget = '';
+    syncWidgets();
+    return apply.length;
+  } catch (e) {
+    console.warn('Spunte del widget della spesa non salvate', e);
+    return 0;
+  } finally {
+    applyingWidget = false;
+  }
 }
 
 export async function reloadTemplates(): Promise<void> {

@@ -66,6 +66,15 @@
     void tapFeedback();
   }
 
+  let addInput = $state<HTMLInputElement | null>(null);
+  // Il + del widget "Spesa": cursore subito nel campo per scrivere.
+  $effect(() => {
+    if (!app.focusShopping || !addInput) return;
+    app.focusShopping = false;
+    const input = addInput;
+    setTimeout(() => input.focus(), 250);
+  });
+
   async function toggle(s: ShoppingItem) {
     void tapFeedback();
     await updateShopping(db, s.id, { done: !s.done });
@@ -137,7 +146,7 @@
       void add();
     }}
   >
-    <input class="input" bind:value={text} placeholder="Aggiungi: latte, pane, uova…" autocomplete="off" enterkeyhint="done" />
+    <input class="input" bind:this={addInput} bind:value={text} placeholder="Aggiungi: latte, pane, uova…" autocomplete="off" enterkeyhint="done" />
     <button class="circle-btn lime addbtn" type="submit" aria-label="Aggiungi alla lista" disabled={!text.trim()}><Icon name="plus" size={24} stroke={2.6} /></button>
   </form>
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cerchio vuoto del widget "Spesa": prodotto ancora da comprare -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <stroke android:width="2dp" android:color="@color/widget_muted" />
+    <size android:width="20dp" android:height="20dp" />
+</shape>

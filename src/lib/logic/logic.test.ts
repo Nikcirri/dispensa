@@ -11,6 +11,7 @@ import { filterItems, findMergeTarget, groupByUrgency, itemsToUseFirst, mergeIte
 import { defaultSettings, sanitizeSettings } from './settings';
 import { addToList, cleanDetails, detailText, pantryNamesFor, shoppingShareText, sortShopping, splitNames } from './shopping';
 import { sanitizeShopping } from './backup';
+import { shoppingChangesToApply, widgetShopping } from './widget';
 import { joinNames, matchesQuery, normalize } from './text';
 
 const TODAY = '2026-11-15';
@@ -225,6 +226,24 @@ describe('spesa', () => {
     expect('details' in sanitizeShopping({ ...two, details: [] })!).toBe(false);
     // Rimettendo in lista un prodotto che c'è già, le specifiche restano.
     expect(addToList([two], 'Pasta').item.details).toEqual(two.details);
+  });
+  it('widget della spesa: prima da comprare, nota e specifiche in una riga; le spunte del widget si applicano', () => {
+    const pane = { ...addToList([], 'pane', '', 'x').item, done: true };
+    const pasta = { ...addToList([pane], 'pasta', '1 kg', 'x').item, details: [{ text: 'penne', qty: 2 }, { text: 'spaghetti', qty: 1 }] };
+    const w = widgetShopping([pane, pasta]);
+    expect(w.map((x) => [x.name, x.details, x.done])).toEqual([
+      ['Pasta', '1 kg · 2 × penne · spaghetti', false],
+      ['Pane', '', true],
+    ]);
+    expect(w[0]!.id).toBe(pasta.id);
+    // Spunta il pasta, toglie la spunta al pane; un prodotto non più in lista si ignora, uno già così pure.
+    expect(
+      shoppingChangesToApply([pane, pasta], [
+        { id: pasta.id, done: true },
+        { id: pane.id, done: true },
+        { id: 'sparito', done: true },
+      ]),
+    ).toEqual([{ id: pasta.id, done: true }]);
   });
   it('più nomi insieme', () => {
     expect(splitNames('latte, pane e uova')).toEqual(['latte', 'pane', 'uova']);

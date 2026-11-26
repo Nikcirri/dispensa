@@ -9,7 +9,7 @@ const RES = '../android/app/src/main/res';
 const WIDGET_JAVA = '../android/app/src/main/java/com/nikcirri/dispensa/widgets';
 /** Le sole viste che Android accetta dentro un widget (RemoteViews). */
 const REMOTE_VIEWS = ['LinearLayout', 'FrameLayout', 'RelativeLayout', 'TextView', 'ImageView', 'ProgressBar'];
-const WIDGETS = ['products', 'meals'];
+const WIDGETS = ['products', 'meals', 'shopping'];
 const LAYOUTS = [
   'widget_products',
   'widget_product_row',
@@ -18,6 +18,9 @@ const LAYOUTS = [
   'widget_meal_day',
   'widget_meal_row',
   'widget_meals_preview',
+  'widget_shopping',
+  'widget_shopping_row',
+  'widget_shopping_preview',
 ];
 
 describe('permessi', () => {
@@ -31,10 +34,12 @@ describe('permessi', () => {
 describe('widget della schermata Home', () => {
   const manifest = read('../android/app/src/main/AndroidManifest.xml');
 
-  it('il manifest dichiara i due widget e il ricevitore del cambio di giorno (non raggiungibile da altre app)', () => {
+  it('il manifest dichiara i tre widget, il ricevitore del cambio di giorno e quello delle spunte (non raggiungibili da altre app)', () => {
     expect(manifest).toContain('android:name=".widgets.ProductsWidget"');
     expect(manifest).toContain('android:name=".widgets.MealsWidget"');
+    expect(manifest).toContain('android:name=".widgets.ShoppingWidget"');
     expect(manifest).toMatch(/android:name="\.widgets\.WidgetRefreshReceiver"\s+android:exported="false"/);
+    expect(manifest).toMatch(/android:name="\.widgets\.ShoppingToggleReceiver"\s+android:exported="false"/);
     for (const w of WIDGETS) expect(manifest).toContain(`android:resource="@xml/widget_${w}_info"`);
     expect(read('../android/app/src/main/java/com/nikcirri/dispensa/MainActivity.java')).toContain('registerPlugin(WidgetsPlugin.class)');
   });
@@ -114,8 +119,13 @@ describe('widget della schermata Home', () => {
 
   it('le azioni dei widget sono quelle che l’app conosce', () => {
     const links = read(`${WIDGET_JAVA}/WidgetLinks.java`);
-    const actions = [...links.matchAll(/return "(\w+)";/g)].map((m) => m[1]).sort();
-    expect(actions).toEqual(['aggiungi', 'dispensa', 'pasti']);
-    expect(read('./lib/services/widgets.ts')).toContain("export type WidgetAction = 'dispensa' | 'aggiungi' | 'pasti';");
+    const actions = [...links.matchAll(/return "([\w-]+)";/g)].map((m) => m[1]).sort();
+    expect(actions).toEqual(['aggiungi', 'dispensa', 'pasti', 'scrivi-spesa', 'spesa']);
+    expect(read('./lib/services/widgets.ts')).toContain("export type WidgetAction = 'dispensa' | 'aggiungi' | 'pasti' | 'spesa' | 'scrivi-spesa';");
+    // Le spunte del widget della spesa: l'app le prende con il metodo del plugin che esiste davvero.
+    const plugin = read(`${WIDGET_JAVA}/WidgetsPlugin.java`);
+    expect(plugin).toContain('public void takeShoppingChanges(PluginCall call)');
+    expect(plugin).toContain('notifyListeners("shoppingChanged"');
+    expect(read('./lib/services/widgets.ts')).toContain("addListener(event: 'shoppingChanged'");
   });
 });
